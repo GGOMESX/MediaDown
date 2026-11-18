@@ -1,0 +1,17 @@
+{
+  "extName": { "message": "Baixador de Mídia" },
+  "extDescription": { "message": "Detecta vídeos sem proteção na página atual e prepara o download." },
+  "popupTitle": { "message": "Mídias nesta página" },
+  "emptyState": { "message": "Nenhuma mídia detectada ainda." },
+  "emptyHint": { "message": "Dê play no vídeo: muitos sites só carregam a mídia quando ela começa a tocar." },
+  "kindProgressive": { "message": "Arquivo" },
+  "kindHls": { "message": "HLS" },
+  "kindDash": { "message": "DASH" },
+  "protectionClear": { "message": "Sem proteção" },
+  "protectionProtected": { "message": "Protegido" },
+  "protectionUnknown": { "message": "Verificando…" },
+  "copyUrl": { "message": "Copiar URL" },
+  "copied": { "message": "Copiado!" },
+  "drmExplanation": { "message": "Conteúdo criptografado (DRM). Por lei, não pode ser baixado." },
+  "unsupportedPage": { "message": "Esta página não pode ser analisada (página interna do navegador)." }
+}

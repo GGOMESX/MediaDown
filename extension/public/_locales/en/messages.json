@@ -1,0 +1,17 @@
+{
+  "extName": { "message": "Media Downloader" },
+  "extDescription": { "message": "Detects unprotected videos on the current page and prepares them for download." },
+  "popupTitle": { "message": "Media on this page" },
+  "emptyState": { "message": "No media detected yet." },
+  "emptyHint": { "message": "Press play: many sites only load the media once playback starts." },
+  "kindProgressive": { "message": "File" },
+  "kindHls": { "message": "HLS" },
+  "kindDash": { "message": "DASH" },
+  "protectionClear": { "message": "Unprotected" },
+  "protectionProtected": { "message": "Protected" },
+  "protectionUnknown": { "message": "Checking…" },
+  "copyUrl": { "message": "Copy URL" },
+  "copied": { "message": "Copied!" },
+  "drmExplanation": { "message": "Encrypted content (DRM). It cannot legally be downloaded." },
+  "unsupportedPage": { "message": "This page cannot be analyzed (internal browser page)." }
+}
