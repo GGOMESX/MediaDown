@@ -17,6 +17,8 @@ export interface DetectedMedia {
   sizeBytes?: number;
   /** Keys of variant playlists, set only on an inspected HLS master playlist. */
   variantKeys?: string[];
+  /** Id from chrome.downloads, once the user started a download of this media. */
+  downloadId?: number;
   detectedAt: number;
 }
 

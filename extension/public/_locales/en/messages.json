@@ -1,17 +1,122 @@
 {
-  "extName": { "message": "Media Downloader" },
-  "extDescription": { "message": "Detects unprotected videos on the current page and prepares them for download." },
-  "popupTitle": { "message": "Media on this page" },
-  "emptyState": { "message": "No media detected yet." },
-  "emptyHint": { "message": "Press play: many sites only load the media once playback starts." },
-  "kindProgressive": { "message": "File" },
-  "kindHls": { "message": "HLS" },
-  "kindDash": { "message": "DASH" },
-  "protectionClear": { "message": "Unprotected" },
-  "protectionProtected": { "message": "Protected" },
-  "protectionUnknown": { "message": "Checking…" },
-  "copyUrl": { "message": "Copy URL" },
-  "copied": { "message": "Copied!" },
-  "drmExplanation": { "message": "Encrypted content (DRM). It cannot legally be downloaded." },
-  "unsupportedPage": { "message": "This page cannot be analyzed (internal browser page)." }
+  "extName": {
+    "message": "Media Downloader"
+  },
+  "extDescription": {
+    "message": "Detects unprotected videos on the current page and prepares them for download."
+  },
+  "popupTitle": {
+    "message": "Media on this page"
+  },
+  "emptyState": {
+    "message": "No media detected yet."
+  },
+  "emptyHint": {
+    "message": "Press play: many sites only load the media once playback starts."
+  },
+  "kindProgressive": {
+    "message": "File"
+  },
+  "kindHls": {
+    "message": "HLS"
+  },
+  "kindDash": {
+    "message": "DASH"
+  },
+  "protectionClear": {
+    "message": "Unprotected"
+  },
+  "protectionProtected": {
+    "message": "Protected"
+  },
+  "protectionUnknown": {
+    "message": "Checking…"
+  },
+  "copyUrl": {
+    "message": "Copy URL"
+  },
+  "copied": {
+    "message": "Copied!"
+  },
+  "drmExplanation": {
+    "message": "Encrypted content (DRM). It cannot legally be downloaded."
+  },
+  "unsupportedPage": {
+    "message": "This page cannot be analyzed (internal browser page)."
+  },
+  "download": {
+    "message": "Download"
+  },
+  "cancel": {
+    "message": "Cancel"
+  },
+  "showInFolder": {
+    "message": "Show in folder"
+  },
+  "retry": {
+    "message": "Retry"
+  },
+  "downloadAgain": {
+    "message": "Download again"
+  },
+  "downloadComplete": {
+    "message": "Done"
+  },
+  "progressOf": {
+    "message": "$1 of $2"
+  },
+  "progressReceived": {
+    "message": "$1 received"
+  },
+  "needsCompanion": {
+    "message": "HLS/DASH downloads arrive with the companion app (Sprint 3)."
+  },
+  "errorForbidden": {
+    "message": "The server refused the direct download (hotlink protection). The companion app will handle this."
+  },
+  "errorExpired": {
+    "message": "The link expired. Reload the page, press play and try again."
+  },
+  "errorNetwork": {
+    "message": "The connection dropped during the download."
+  },
+  "errorDiskFull": {
+    "message": "Not enough disk space."
+  },
+  "errorFileAccess": {
+    "message": "The file could not be written. Check the folder in the options."
+  },
+  "errorCanceled": {
+    "message": "Download canceled."
+  },
+  "errorUnknown": {
+    "message": "The download failed for an unknown reason."
+  },
+  "refusalNotFound": {
+    "message": "This media is no longer listed. Reload the page."
+  },
+  "refusalFailed": {
+    "message": "The browser refused to start the download."
+  },
+  "openSettings": {
+    "message": "Options"
+  },
+  "optionsTitle": {
+    "message": "Media Downloader options"
+  },
+  "optionsFolderLabel": {
+    "message": "Destination folder (inside Downloads)"
+  },
+  "optionsFolderHint": {
+    "message": "Leave empty to save directly to Downloads. For security, the browser does not allow writing outside that folder."
+  },
+  "optionsAskLabel": {
+    "message": "Ask where to save each file"
+  },
+  "optionsSave": {
+    "message": "Save"
+  },
+  "optionsSaved": {
+    "message": "Options saved."
+  }
 }

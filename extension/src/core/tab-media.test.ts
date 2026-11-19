@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeMedia, applyInspection, visibleMedia, type DetectedMedia } from './tab-media';
+import { mergeMedia, applyInspection, applyDownloadStarted, visibleMedia, type DetectedMedia } from './tab-media';
 
 function media(url: string, overrides: Partial<DetectedMedia> = {}): DetectedMedia {
   return {
@@ -73,5 +73,19 @@ describe('applyInspection', () => {
   it('ignores inspections for media that is no longer listed', () => {
     const list = [media('https://c.example.com/a.mp4')];
     expect(applyInspection(list, 'https://gone.example.com/x.m3u8', { protection: 'clear', variantUrls: [] })).toEqual(list);
+  });
+});
+
+describe('applyDownloadStarted', () => {
+  it('links a download to its media', () => {
+    const list = [media('https://c.example.com/a.mp4'), media('https://c.example.com/b.mp4')];
+    const result = applyDownloadStarted(list, list[0]!.key, 42);
+    expect(result.map(m => m.downloadId)).toEqual([42, undefined]);
+  });
+
+  it('keeps the download link when the same media is seen again', () => {
+    const list = applyDownloadStarted([media('https://c.example.com/a.mp4')], 'https://c.example.com/a.mp4', 7);
+    const merged = mergeMedia(list, media('https://c.example.com/a.mp4?t=new'));
+    expect(merged[0]?.downloadId).toBe(7);
   });
 });

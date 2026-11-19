@@ -1,17 +1,122 @@
 {
-  "extName": { "message": "Baixador de Mídia" },
-  "extDescription": { "message": "Detecta vídeos sem proteção na página atual e prepara o download." },
-  "popupTitle": { "message": "Mídias nesta página" },
-  "emptyState": { "message": "Nenhuma mídia detectada ainda." },
-  "emptyHint": { "message": "Dê play no vídeo: muitos sites só carregam a mídia quando ela começa a tocar." },
-  "kindProgressive": { "message": "Arquivo" },
-  "kindHls": { "message": "HLS" },
-  "kindDash": { "message": "DASH" },
-  "protectionClear": { "message": "Sem proteção" },
-  "protectionProtected": { "message": "Protegido" },
-  "protectionUnknown": { "message": "Verificando…" },
-  "copyUrl": { "message": "Copiar URL" },
-  "copied": { "message": "Copiado!" },
-  "drmExplanation": { "message": "Conteúdo criptografado (DRM). Por lei, não pode ser baixado." },
-  "unsupportedPage": { "message": "Esta página não pode ser analisada (página interna do navegador)." }
+  "extName": {
+    "message": "Baixador de Mídia"
+  },
+  "extDescription": {
+    "message": "Detecta vídeos sem proteção na página atual e prepara o download."
+  },
+  "popupTitle": {
+    "message": "Mídias nesta página"
+  },
+  "emptyState": {
+    "message": "Nenhuma mídia detectada ainda."
+  },
+  "emptyHint": {
+    "message": "Dê play no vídeo: muitos sites só carregam a mídia quando ela começa a tocar."
+  },
+  "kindProgressive": {
+    "message": "Arquivo"
+  },
+  "kindHls": {
+    "message": "HLS"
+  },
+  "kindDash": {
+    "message": "DASH"
+  },
+  "protectionClear": {
+    "message": "Sem proteção"
+  },
+  "protectionProtected": {
+    "message": "Protegido"
+  },
+  "protectionUnknown": {
+    "message": "Verificando…"
+  },
+  "copyUrl": {
+    "message": "Copiar URL"
+  },
+  "copied": {
+    "message": "Copiado!"
+  },
+  "drmExplanation": {
+    "message": "Conteúdo criptografado (DRM). Por lei, não pode ser baixado."
+  },
+  "unsupportedPage": {
+    "message": "Esta página não pode ser analisada (página interna do navegador)."
+  },
+  "download": {
+    "message": "Baixar"
+  },
+  "cancel": {
+    "message": "Cancelar"
+  },
+  "showInFolder": {
+    "message": "Mostrar na pasta"
+  },
+  "retry": {
+    "message": "Tentar novamente"
+  },
+  "downloadAgain": {
+    "message": "Baixar de novo"
+  },
+  "downloadComplete": {
+    "message": "Concluído"
+  },
+  "progressOf": {
+    "message": "$1 de $2"
+  },
+  "progressReceived": {
+    "message": "$1 recebidos"
+  },
+  "needsCompanion": {
+    "message": "Download de HLS/DASH chega com o app companion (Sprint 3)."
+  },
+  "errorForbidden": {
+    "message": "O servidor recusou o download direto (proteção contra hotlink). O app companion vai resolver isso."
+  },
+  "errorExpired": {
+    "message": "O link expirou. Recarregue a página, dê play e tente de novo."
+  },
+  "errorNetwork": {
+    "message": "A conexão caiu durante o download."
+  },
+  "errorDiskFull": {
+    "message": "Sem espaço em disco."
+  },
+  "errorFileAccess": {
+    "message": "Não foi possível gravar o arquivo. Verifique a pasta nas opções."
+  },
+  "errorCanceled": {
+    "message": "Download cancelado."
+  },
+  "errorUnknown": {
+    "message": "O download falhou por um motivo desconhecido."
+  },
+  "refusalNotFound": {
+    "message": "Esta mídia não está mais na lista. Recarregue a página."
+  },
+  "refusalFailed": {
+    "message": "O navegador recusou iniciar o download."
+  },
+  "openSettings": {
+    "message": "Opções"
+  },
+  "optionsTitle": {
+    "message": "Opções do Baixador de Mídia"
+  },
+  "optionsFolderLabel": {
+    "message": "Pasta de destino (dentro de Downloads)"
+  },
+  "optionsFolderHint": {
+    "message": "Deixe vazio para salvar direto em Downloads. Por segurança, o navegador não permite gravar fora dessa pasta."
+  },
+  "optionsAskLabel": {
+    "message": "Perguntar onde salvar cada arquivo"
+  },
+  "optionsSave": {
+    "message": "Salvar"
+  },
+  "optionsSaved": {
+    "message": "Opções salvas."
+  }
 }

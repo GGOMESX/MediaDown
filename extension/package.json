@@ -11,10 +11,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "test:e2e": "wxt build && node --test --test-concurrency=1 e2e/extension.e2e.mjs"
   },
   "devDependencies": {
     "@wxt-dev/module-vue": "^1.0.3",
+    "playwright": "^1.63.0",
     "typescript": "^5.9.3",
     "vitest": "^5.1.1",
     "vue": "^3.5.45",

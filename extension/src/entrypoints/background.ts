@@ -4,6 +4,8 @@ import { toObservedResponse } from '@/core/response-headers';
 import { mergeMedia, applyInspection, visibleMedia } from '@/core/tab-media';
 import { updateTabMedia, clearTabMedia } from '@/core/tab-media-store';
 import { fetchAndInspectManifest } from '@/core/manifest-fetcher';
+import { parseRequest, type DownloadResponse } from '@/core/messages';
+import { startDownload } from '@/core/download-service';
 
 const OBSERVED_TYPES = ['media', 'xmlhttprequest', 'other', 'object'] as const;
 const inspectionsInFlight = new Set<string>();
@@ -22,6 +24,13 @@ export default defineBackground(() => {
   );
 
   browser.tabs.onRemoved.addListener(tabId => void clearTabMedia(tabId));
+
+  browser.runtime.onMessage.addListener((message, sender): Promise<DownloadResponse> | undefined => {
+    // Only our own extension pages (popup) may ask for downloads, never content in a web page.
+    if (sender.id !== browser.runtime.id || sender.tab?.url?.startsWith('http')) return undefined;
+    const request = parseRequest(message);
+    return request ? startDownload(request) : undefined;
+  });
 });
 
 async function handleResponse(tabId: number, url: string, statusCode: number, headers?: { name: string; value?: string }[]) {

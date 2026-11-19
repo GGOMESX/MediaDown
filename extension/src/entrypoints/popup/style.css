@@ -38,7 +38,8 @@ body {
 }
 
 .popup { padding: 12px; }
-.popup__title { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+.popup__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.popup__title { margin: 0; font-size: 15px; font-weight: 600; }
 
 .empty { color: var(--muted); padding: 16px 4px; }
 .empty p { margin: 0 0 6px; }
@@ -47,11 +48,15 @@ body {
 .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 480px; overflow-y: auto; }
 
 .item {
-  display: flex; align-items: center; gap: 10px;
+  display: grid; gap: 6px;
   padding: 8px 10px; border-radius: 8px;
   background: var(--surface); border: 1px solid var(--border);
 }
 .item--protected { opacity: 0.85; }
+.item__row { display: flex; align-items: center; gap: 10px; }
+.item__actions { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.item__hint { color: var(--muted); font-size: 11px; }
+.item__ok { color: var(--ok); font-size: 11px; font-weight: 600; }
 .item__main { display: grid; gap: 3px; min-width: 0; flex: 1; }
 .item__name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item__meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--muted); font-size: 11px; }
@@ -67,4 +72,18 @@ body {
   background: var(--accent); color: var(--accent-text); font: inherit; font-weight: 600; cursor: pointer;
 }
 .button:hover { filter: brightness(1.08); }
+.button:disabled { opacity: 0.6; cursor: progress; }
+.button--secondary { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+.link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-size: 11px; cursor: pointer; }
+.link:hover { text-decoration: underline; }
+.link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+.progress { display: grid; gap: 3px; }
+.progress__track { height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.progress__bar { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.3s ease; }
+.progress__bar--indeterminate { animation: slide 1.2s ease-in-out infinite; }
+.progress__label { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(330%); } }
+@media (prefers-reduced-motion: reduce) { .progress__bar, .progress__bar--indeterminate { animation: none; transition: none; } }
 .button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

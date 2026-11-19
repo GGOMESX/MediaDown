@@ -1,14 +1,20 @@
 <script setup lang="ts">
+import { browser } from 'wxt/browser';
 import MediaItem from './MediaItem.vue';
 import { useTabMedia } from './useTabMedia';
+import { useDownloads } from './useDownloads';
 import { t } from '@/core/i18n';
 
-const { media, isSupportedPage } = useTabMedia();
+const { tabId, media, downloadIds, isSupportedPage } = useTabMedia();
+const { statusById } = useDownloads(downloadIds);
 </script>
 
 <template>
   <main class="popup">
-    <h1 class="popup__title">{{ t('popupTitle') }}</h1>
+    <header class="popup__header">
+      <h1 class="popup__title">{{ t('popupTitle') }}</h1>
+      <button class="link" type="button" @click="browser.runtime.openOptionsPage()">{{ t('openSettings') }}</button>
+    </header>
 
     <p v-if="!isSupportedPage" class="empty">{{ t('unsupportedPage') }}</p>
 
@@ -18,7 +24,13 @@ const { media, isSupportedPage } = useTabMedia();
     </div>
 
     <ul v-else class="list" aria-live="polite">
-      <MediaItem v-for="item in media" :key="item.key" :media="item" />
+      <MediaItem
+        v-for="item in media"
+        :key="item.key"
+        :media="item"
+        :tab-id="tabId!"
+        :download="item.downloadId !== undefined ? statusById[item.downloadId] : undefined"
+      />
     </ul>
   </main>
 </template>

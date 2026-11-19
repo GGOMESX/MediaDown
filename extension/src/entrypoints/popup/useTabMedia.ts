@@ -9,6 +9,7 @@ export function useTabMedia() {
   const isSupportedPage = ref(true);
   const allMedia = ref<DetectedMedia[]>([]);
   const media = computed(() => [...visibleMedia(allMedia.value)].reverse());
+  const downloadIds = computed(() => media.value.flatMap(item => (item.downloadId === undefined ? [] : [item.downloadId])));
 
   async function reload() {
     if (tabId.value !== null) allMedia.value = await readTabMedia(tabId.value);
@@ -30,5 +31,5 @@ export function useTabMedia() {
 
   onUnmounted(() => browser.storage.onChanged.removeListener(onStorageChanged));
 
-  return { media, isSupportedPage };
+  return { tabId, media, downloadIds, isSupportedPage };
 }

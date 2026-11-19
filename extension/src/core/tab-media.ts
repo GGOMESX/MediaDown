@@ -35,6 +35,10 @@ export function applyInspection(list: readonly DetectedMedia[], key: string, ins
   });
 }
 
+export function applyDownloadStarted(list: readonly DetectedMedia[], key: string, downloadId: number): DetectedMedia[] {
+  return list.map(item => (item.key === key ? { ...item, downloadId } : item));
+}
+
 /** Media worth showing: variant playlists are hidden behind their master playlist. */
 export function visibleMedia(list: readonly DetectedMedia[]): DetectedMedia[] {
   const hidden = new Set(list.flatMap(item => item.variantKeys ?? []));

@@ -5,7 +5,7 @@ Extensão de navegador + app desktop (companion) para detectar e baixar vídeos
 
 | Pasta | Conteúdo | Status |
 |---|---|---|
-| `extension/` | Extensão MV3 (WXT + TypeScript + Vue) | Sprint 1 ✅ |
+| `extension/` | Extensão MV3 (WXT + TypeScript + Vue) | Sprints 1 e 2 ✅ |
 | `companion/` | App Tauri que executa yt-dlp/ffmpeg | Sprint 3 |
 
 ## Extensão: desenvolvimento
@@ -14,6 +14,7 @@ Extensão de navegador + app desktop (companion) para detectar e baixar vídeos
 cd extension
 npm install
 npm test          # testes unitários (Vitest)
+npm run test:e2e  # build + testes E2E no Chromium com a extensão carregada (Playwright)
 npm run typecheck
 npm run dev       # abre um Chrome com a extensão carregada e hot reload
 npm run build     # gera .output/chrome-mv3
@@ -37,6 +38,23 @@ npm run build     # gera .output/chrome-mv3
 3. Variantes de uma playlist master ficam ocultas atrás da master.
 4. A lista fica em `storage.session` por aba e é limpa ao navegar ou fechar a aba.
    O ícone mostra a contagem.
+
+## Download direto (Sprint 2)
+
+- Botão **Baixar** para arquivos MP4/WebM sem proteção, com progresso, cancelamento,
+  retomada e **Mostrar na pasta**.
+- **Opções** (link no popup): subpasta dentro de Downloads e "perguntar onde salvar".
+  O navegador não permite gravar fora da pasta Downloads, a menos que o usuário
+  escolha o local manualmente.
+- Nome do arquivo: vem da URL; se a URL for um hash da CDN, usa o título da página.
+  Caracteres inválidos no Windows, nomes reservados (`CON`, `NUL`…) e path traversal
+  são neutralizados. Se o sistema recusar acentos, tenta de novo sem eles.
+- O background **revalida** cada pedido: só baixa mídia que está na lista da aba,
+  sem proteção e progressiva. Uma mensagem forjada não consegue baixar URL
+  arbitrária nem conteúdo com DRM, e isso tem teste E2E.
+- Limitação conhecida: sites com proteção contra hotlink (exigem `Referer`) falham no
+  download direto, porque a API de downloads não permite definir esse cabeçalho.
+  A extensão explica o motivo, e o companion (Sprint 3) vai resolver.
 
 ## Decisões registradas
 
