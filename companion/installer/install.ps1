@@ -9,7 +9,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$SourceDir = $PSScriptRoot,
+    [string]$SourceDir,
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'MediaDown'),
     [string]$ExtensionId = 'jakijlbgipgbbaldfhhpglollgnldckh',
     [switch]$SkipEngines
@@ -95,6 +95,8 @@ function Register-NativeHost([string]$ManifestPath) {
     }
 }
 
+# Windows PowerShell 5.1 leaves $PSScriptRoot empty in param() defaults, so resolve it here.
+if (-not $SourceDir) { $SourceDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 if ($ExtensionId -notmatch '^[a-p]{32}$') { throw "ID de extensão inválido: $ExtensionId" }
 $hostSource = Join-Path $SourceDir 'mediadown-host.exe'
 if (-not (Test-Path -LiteralPath $hostSource)) { throw "mediadown-host.exe não encontrado em $SourceDir" }
