@@ -199,7 +199,7 @@ impl Host {
     }
 
     /// Collects events until one matches; returns everything seen so far.
-    fn wait_for(&self, predicate: impl Fn(&Value) -> bool) -> Vec<Value> {
+    fn wait_for(&self, mut predicate: impl FnMut(&Value) -> bool) -> Vec<Value> {
         let deadline = Instant::now() + TIMEOUT;
         let mut seen = Vec::new();
         while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
@@ -211,6 +211,20 @@ impl Host {
             }
         }
         panic!("timed out; events so far: {seen:#?}");
+    }
+}
+
+impl Host {
+    /// Waits until every job has finished, in whatever order; returns each job's final event.
+    fn wait_for_jobs(&self, job_ids: &[&str]) -> Vec<Value> {
+        let mut finals: Vec<Option<Value>> = vec![None; job_ids.len()];
+        self.wait_for(|event| {
+            if let Some(index) = job_ids.iter().position(|id| is_final(id)(event)) {
+                finals[index] = Some(event.clone());
+            }
+            finals.iter().all(Option::is_some)
+        });
+        finals.into_iter().map(Option::unwrap).collect()
     }
 }
 
@@ -343,9 +357,9 @@ fn picks_the_requested_resolution() {
 
     host.send(download("small", &master, None, "pequeno", json!({ "mode": "maxHeight", "height": 144 })));
     host.send(download("large", &master, None, "grande", best()));
-    let small = host.wait_for(is_final("small")).pop().unwrap();
-    assert_eq!(small["type"], "done", "{small:#?}");
-    host.wait_for(is_final("large"));
+    // Both run in parallel and may finish in any order.
+    let finals = host.wait_for_jobs(&["small", "large"]);
+    assert!(finals.iter().all(|event| event["type"] == "done"), "{finals:#?}");
 
     let folder = host.downloads.path().join("Media Downloader");
     assert_eq!(video_size(&tools, &folder.join("pequeno.mp4")), "160x120");
