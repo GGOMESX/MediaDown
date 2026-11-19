@@ -2,15 +2,17 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'sprint-*']
   pull_request:
+
+env:
+  # Same yt-dlp version the Windows installer pins in companion/installer/engines.json.
+  YT_DLP_VERSION: '2026.10.26'
 
 jobs:
   extension:
+    name: Extension + companion (Linux, full E2E)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: extension
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,14 +20,104 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: extension/package-lock.json
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-      - run: npm run build:firefox
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: companion
+
+      - name: Install yt-dlp and ffmpeg
+        run: |
+          pip install "yt-dlp==${YT_DLP_VERSION}"
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          echo "MEDIADOWN_TEST_YTDLP=$(which yt-dlp)" >> "$GITHUB_ENV"
+          echo "MEDIADOWN_TEST_FFMPEG_DIR=$(dirname "$(which ffmpeg)")" >> "$GITHUB_ENV"
+
+      - name: Companion tests (unit + integration with real yt-dlp/ffmpeg)
+        working-directory: companion
+        run: |
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+          cargo build
+
+      - name: Extension checks
+        working-directory: extension
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build:firefox
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
       - uses: actions/upload-artifact@v4
         with:
-          name: extension-builds
-          path: extension/.output/*/
+          name: extension-chrome
+          path: extension/.output/chrome-mv3/
+
+  windows:
+    name: Companion (Windows build, installer, integration)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: companion
+
+      - name: Unit tests and release build
+        working-directory: companion
+        run: |
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+          cargo build --release
+
+      - name: Stage release package
+        shell: pwsh
+        run: |
+          $dist = "dist/MediaDown-companion"
+          New-Item -ItemType Directory -Force $dist | Out-Null
+          Copy-Item companion/target/release/mediadown-host.exe $dist
+          Copy-Item companion/installer/* $dist
+
+      - name: Run installer (Windows PowerShell 5.1, as the user will)
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File dist/MediaDown-companion/install.ps1 -InstallDir "$env:RUNNER_TEMP\MediaDown"
+
+      - name: Verify registration and manifest
+        shell: pwsh
+        run: |
+          $installDir = "$env:RUNNER_TEMP\MediaDown"
+          foreach ($root in 'HKCU:\Software\Google\Chrome', 'HKCU:\Software\Microsoft\Edge') {
+            $value = (Get-ItemProperty "$root\NativeMessagingHosts\com.mediadown.host").'(default)'
+            if ($value -ne "$installDir\com.mediadown.host.json") { throw "wrong registry value under $root : $value" }
+          }
+          $bytes = [IO.File]::ReadAllBytes("$installDir\com.mediadown.host.json")
+          if ($bytes[0] -eq 0xEF) { throw 'manifest must not have a BOM' }
+          $manifest = Get-Content -Raw "$installDir\com.mediadown.host.json" | ConvertFrom-Json
+          if ($manifest.allowed_origins[0] -ne 'chrome-extension://jakijlbgipgbbaldfhhpglollgnldckh/') { throw 'wrong allowed origin' }
+          if (-not (Test-Path $manifest.path)) { throw 'host path missing' }
+          & "$installDir\bin\yt-dlp.exe" --version
+          & "$installDir\bin\ffmpeg.exe" -hide_banner -version | Select-Object -First 1
+
+      - name: Re-running the installer is idempotent
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File dist/MediaDown-companion/install.ps1 -InstallDir "$env:RUNNER_TEMP\MediaDown"
+
+      - name: Integration tests with the installed engines (Job Object cancel, referer, MP3)
+        working-directory: companion
+        shell: pwsh
+        run: |
+          $env:MEDIADOWN_TEST_YTDLP = "$env:RUNNER_TEMP\MediaDown\bin\yt-dlp.exe"
+          $env:MEDIADOWN_TEST_FFMPEG_DIR = "$env:RUNNER_TEMP\MediaDown\bin"
+          cargo test --release --test host_integration -- --nocapture
+
+      - name: Uninstaller removes everything
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File dist/MediaDown-companion/uninstall.ps1 -InstallDir "$env:RUNNER_TEMP\MediaDown"
+          if (Test-Path 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.mediadown.host') { throw 'registry key left behind' }
+          if (Test-Path "$env:RUNNER_TEMP\MediaDown") { throw 'install dir left behind' }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MediaDown-companion-windows
+          path: dist/MediaDown-companion/

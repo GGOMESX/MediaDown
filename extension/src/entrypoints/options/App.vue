@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { loadSettings, saveSettings, DEFAULT_SETTINGS, type Settings } from '@/core/settings';
-import { t } from '@/core/i18n';
+import { loadSettings, saveSettings, DEFAULT_SETTINGS, PRESETS, type Settings } from '@/core/settings';
+import { t, PRESET_LABEL } from '@/core/i18n';
 
 const form = ref<Settings>({ ...DEFAULT_SETTINGS });
 const saved = ref(false);
@@ -26,6 +26,14 @@ async function save() {
         <span class="field__label">{{ t('optionsFolderLabel') }}</span>
         <input v-model="form.folder" class="field__input" type="text" name="folder" autocomplete="off" />
         <span class="field__hint">{{ t('optionsFolderHint') }}</span>
+      </label>
+
+      <label class="field">
+        <span class="field__label">{{ t('optionsPresetLabel') }}</span>
+        <select v-model="form.preset" class="field__input" name="preset">
+          <option v-for="preset in PRESETS" :key="preset" :value="preset">{{ t(PRESET_LABEL[preset]) }}</option>
+        </select>
+        <span class="field__hint">{{ t('optionsPresetHint') }}</span>
       </label>
 
       <label class="checkbox">

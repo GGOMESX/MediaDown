@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeFileName, sanitizeFolder, buildDownloadPath, chooseBaseName, toAsciiPath } from './file-name';
+import { sanitizeFileName, sanitizeFolder, buildDownloadPath, chooseBaseName, chooseStem, toAsciiPath } from './file-name';
 
 describe('sanitizeFileName', () => {
   it('replaces characters forbidden on Windows, macOS and Linux', () => {
@@ -85,5 +85,22 @@ describe('toAsciiPath', () => {
 
   it('replaces characters without an ASCII equivalent', () => {
     expect(toAsciiPath('日本語 — aula.mp4')).toBe('___ _ aula.mp4');
+  });
+});
+
+describe('chooseStem', () => {
+  it('uses the page title for generic manifest names', () => {
+    expect(chooseStem('https://c.example.com/aula/master.m3u8?sig=1', 'Aula 3: Ownership')).toBe('Aula 3_ Ownership');
+    expect(chooseStem('https://c.example.com/v/index_720.m3u8', 'Clipe')).toBe('Clipe');
+    expect(chooseStem('https://c.example.com/v/manifest.mpd', 'Palestra')).toBe('Palestra');
+  });
+
+  it('keeps meaningful names from the URL, without extension', () => {
+    expect(chooseStem('https://c.example.com/v/palestra-rustconf.m3u8', 'Página')).toBe('palestra-rustconf');
+    expect(chooseStem('https://c.example.com/v/minha%20aula.mp4', 'Página')).toBe('minha aula');
+  });
+
+  it('falls back to the URL name when there is no title', () => {
+    expect(chooseStem('https://c.example.com/v/master.m3u8', '')).toBe('master');
   });
 });

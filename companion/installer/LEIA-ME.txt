@@ -1,0 +1,16 @@
+MediaDown companion (Windows)
+=============================
+
+Instalar:     clique duas vezes em install.cmd
+Desinstalar:  clique duas vezes em uninstall.cmd
+
+O instalador:
+  - copia o app para %LOCALAPPDATA%\MediaDown (não precisa de administrador);
+  - baixa yt-dlp e ffmpeg nas versões fixadas em engines.json e confere o SHA-256;
+  - registra o app para o Chrome, Edge e Brave (apenas para o seu usuário).
+
+Se o Windows mostrar "O Windows protegeu o computador" (SmartScreen), clique em
+"Mais informações" > "Executar assim mesmo". Isso acontece porque o app não tem
+assinatura digital (uso pessoal).
+
+Depois de instalar, recarregue a extensão em chrome://extensions.

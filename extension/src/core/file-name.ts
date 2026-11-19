@@ -41,6 +41,21 @@ export function chooseBaseName(rawUrl: string, contentType: string, pageTitle: s
   return sanitizeFileName(`${name}.${finalExtension}`);
 }
 
+const GENERIC_STREAM_STEM = /^(index|master|playlist|manifest|chunklist|stream|video|media)([-_]?\w{0,8})?$/i;
+
+/**
+ * Name (without extension) for a companion download; yt-dlp appends the real extension.
+ * Stream manifests are almost always called "index"/"master", so the page title wins for them.
+ */
+export function chooseStem(rawUrl: string, pageTitle: string): string {
+  const { stem } = splitUrlFileName(rawUrl);
+  const withoutManifestExtension = stem.replace(/\.(m3u8|mpd)$/i, '');
+  const title = pageTitle.trim();
+  const uninformative = GENERIC_STREAM_STEM.test(withoutManifestExtension) || MACHINE_GENERATED_STEM.test(withoutManifestExtension);
+  const name = uninformative && title ? title : withoutManifestExtension;
+  return sanitizeFileName(name).replace(/\.(mp4|webm|mov|mkv|ogv|m4v)$/i, '');
+}
+
 /** chrome.downloads expects a path relative to the Downloads folder, always with "/". */
 export function buildDownloadPath(folder: string, fileName: string): string {
   return folder ? `${folder}/${fileName}` : fileName;

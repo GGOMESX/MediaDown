@@ -42,6 +42,9 @@ body {
 .popup__title { margin: 0; font-size: 15px; font-weight: 600; }
 
 .empty { color: var(--muted); padding: 16px 4px; }
+
+.popup__footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
+.popup__footer--ok { color: var(--ok); }
 .empty p { margin: 0 0 6px; }
 .empty__hint { font-size: 12px; }
 

@@ -5,9 +5,14 @@ export interface Settings {
   /** Subfolder inside the browser's Downloads folder; the downloads API cannot write elsewhere. */
   folder: string;
   askWhereToSave: boolean;
+  /** Quality for companion downloads (HLS/DASH and files the browser could not fetch). */
+  preset: Preset;
 }
 
-export const DEFAULT_SETTINGS: Readonly<Settings> = { folder: 'Media Downloader', askWhereToSave: false };
+export const PRESETS = ['best', 'max1080p', 'audioMp3'] as const;
+export type Preset = (typeof PRESETS)[number];
+
+export const DEFAULT_SETTINGS: Readonly<Settings> = { folder: 'Media Downloader', askWhereToSave: false, preset: 'best' };
 const STORAGE_KEY = 'settings';
 
 export function normalizeSettings(raw: unknown): Settings {
@@ -15,6 +20,7 @@ export function normalizeSettings(raw: unknown): Settings {
   return {
     folder: typeof input.folder === 'string' ? sanitizeFolder(input.folder) : DEFAULT_SETTINGS.folder,
     askWhereToSave: typeof input.askWhereToSave === 'boolean' ? input.askWhereToSave : DEFAULT_SETTINGS.askWhereToSave,
+    preset: (PRESETS as readonly unknown[]).includes(input.preset) ? (input.preset as Preset) : DEFAULT_SETTINGS.preset,
   };
 }
 

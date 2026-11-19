@@ -1,14 +1,10 @@
 import { ref, watch, onUnmounted, type Ref } from 'vue';
 import { browser } from 'wxt/browser';
-import { toDownloadError, type DownloadError } from '@/core/download-errors';
+import { toDownloadError } from '@/core/download-errors';
 
-export interface DownloadStatus {
-  state: 'in_progress' | 'complete' | 'interrupted';
-  bytesReceived: number;
-  totalBytes?: number;
-  paused: boolean;
-  error?: DownloadError;
-}
+import type { BrowserDownloadStatus } from '@/core/transfer-view';
+
+export type DownloadStatus = BrowserDownloadStatus;
 
 const POLL_INTERVAL_MS = 500;
 
@@ -43,7 +39,6 @@ function toStatus(item: Browser.downloads.DownloadItem): DownloadStatus {
     state: item.state as DownloadStatus['state'],
     bytesReceived: item.bytesReceived,
     totalBytes: item.totalBytes > 0 ? item.totalBytes : undefined,
-    paused: item.paused,
     error: item.error ? toDownloadError(item.error) : undefined,
   };
 }

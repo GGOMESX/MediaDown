@@ -69,10 +69,10 @@
     "message": "$1 recebidos"
   },
   "needsCompanion": {
-    "message": "Download de HLS/DASH chega com o app companion (Sprint 3)."
+    "message": "Para baixar HLS/DASH, instale o app MediaDown para Windows."
   },
   "errorForbidden": {
-    "message": "O servidor recusou o download direto (proteção contra hotlink). O app companion vai resolver isso."
+    "message": "O servidor recusou o download (acesso negado ou proteção contra hotlink)."
   },
   "errorExpired": {
     "message": "O link expirou. Recarregue a página, dê play e tente de novo."
@@ -118,5 +118,56 @@
   },
   "optionsSaved": {
     "message": "Opções salvas."
+  },
+  "downloadWithApp": {
+    "message": "Baixar com o app"
+  },
+  "companionNotInstalled": {
+    "message": "O app MediaDown não está instalado. Rode o install.cmd do pacote do app."
+  },
+  "companionEngineMissing": {
+    "message": "O app MediaDown está sem o yt-dlp. Rode o install.cmd de novo."
+  },
+  "companionIncompatible": {
+    "message": "Não foi possível falar com o app MediaDown. Reinstale o app e recarregue a extensão."
+  },
+  "companionStatusReady": {
+    "message": "App MediaDown conectado · yt-dlp $1"
+  },
+  "companionStatusMissing": {
+    "message": "App MediaDown não instalado: necessário para HLS/DASH."
+  },
+  "queued": {
+    "message": "Na fila…"
+  },
+  "speed": {
+    "message": "$1/s"
+  },
+  "errorDrm": {
+    "message": "O conteúdo é protegido por DRM e não pode ser baixado."
+  },
+  "errorEngineMissing": {
+    "message": "O app MediaDown está sem o yt-dlp. Rode o install.cmd de novo."
+  },
+  "errorInvalidRequest": {
+    "message": "O app recusou o pedido por dados inválidos."
+  },
+  "errorDisconnected": {
+    "message": "A conexão com o app foi perdida (navegador fechado ou app reiniciado)."
+  },
+  "optionsPresetLabel": {
+    "message": "Qualidade (downloads pelo app)"
+  },
+  "optionsPresetHint": {
+    "message": "Vale para HLS/DASH e para downloads feitos pelo app MediaDown. Arquivos diretos baixados pelo navegador são salvos como estão."
+  },
+  "presetBest": {
+    "message": "Melhor qualidade (MP4)"
+  },
+  "presetMax1080p": {
+    "message": "Até 1080p (MP4)"
+  },
+  "presetAudioMp3": {
+    "message": "Somente áudio (MP3)"
   }
 }

@@ -2,9 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { parseRequest } from './messages';
 
 describe('parseRequest', () => {
-  it('accepts a well-formed download request', () => {
-    expect(parseRequest({ type: 'download', tabId: 3, mediaKey: 'https://c.example.com/a.mp4' }))
-      .toEqual({ type: 'download', tabId: 3, mediaKey: 'https://c.example.com/a.mp4' });
+  it('accepts well-formed download requests, optionally choosing the route', () => {
+    expect(parseRequest({ type: 'download', tabId: 3, mediaKey: 'k' })).toEqual({ type: 'download', tabId: 3, mediaKey: 'k' });
+    expect(parseRequest({ type: 'download', tabId: 3, mediaKey: 'k', via: 'companion' })).toEqual({ type: 'download', tabId: 3, mediaKey: 'k', via: 'companion' });
+  });
+
+  it('accepts cancel, reveal and status requests', () => {
+    expect(parseRequest({ type: 'cancel', tabId: 1, mediaKey: 'k' })).toEqual({ type: 'cancel', tabId: 1, mediaKey: 'k' });
+    expect(parseRequest({ type: 'reveal', tabId: 1, mediaKey: 'k' })).toEqual({ type: 'reveal', tabId: 1, mediaKey: 'k' });
+    expect(parseRequest({ type: 'companionStatus', extra: 1 })).toEqual({ type: 'companionStatus' });
   });
 
   it.each([
@@ -12,6 +18,8 @@ describe('parseRequest', () => {
     [{ type: 'download', tabId: '3', mediaKey: 'k' }],
     [{ type: 'download', tabId: -1, mediaKey: 'k' }],
     [{ type: 'download', tabId: 3 }],
+    [{ type: 'download', tabId: 3, mediaKey: 'k', via: 'shell' }],
+    [{ type: 'reveal', tabId: 3, mediaKey: '' }],
     [{ type: 'delete-everything' }],
   ])('rejects malformed input %j', input => {
     expect(parseRequest(input)).toBeNull();

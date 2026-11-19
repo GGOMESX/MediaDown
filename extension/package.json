@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit",
     "postinstall": "wxt prepare",
-    "test:e2e": "wxt build && node --test --test-concurrency=1 e2e/extension.e2e.mjs"
+    "test:e2e": "wxt build && node --test --test-concurrency=1 e2e/extension.e2e.mjs e2e/companion.e2e.mjs"
   },
   "devDependencies": {
     "@wxt-dev/module-vue": "^1.0.3",

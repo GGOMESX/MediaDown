@@ -1,3 +1,5 @@
+import type { CompanionJob } from './companion-job';
+
 export type MediaKind = 'progressive' | 'hls' | 'dash';
 export type Protection = 'unknown' | 'clear' | 'protected';
 
@@ -19,6 +21,8 @@ export interface DetectedMedia {
   variantKeys?: string[];
   /** Id from chrome.downloads, once the user started a download of this media. */
   downloadId?: number;
+  /** Download handled by the companion app (HLS/DASH, or files the browser could not fetch). */
+  job?: CompanionJob;
   detectedAt: number;
 }
 

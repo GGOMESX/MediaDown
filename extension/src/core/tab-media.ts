@@ -36,7 +36,7 @@ export function applyInspection(list: readonly DetectedMedia[], key: string, ins
 }
 
 export function applyDownloadStarted(list: readonly DetectedMedia[], key: string, downloadId: number): DetectedMedia[] {
-  return list.map(item => (item.key === key ? { ...item, downloadId } : item));
+  return list.map(item => (item.key === key ? { ...item, downloadId, job: undefined } : item));
 }
 
 /** Media worth showing: variant playlists are hidden behind their master playlist. */

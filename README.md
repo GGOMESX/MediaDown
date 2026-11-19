@@ -1,12 +1,21 @@
 # Media Downloader
 
-Extensão de navegador + app desktop (companion) para detectar e baixar vídeos
+Extensão de navegador + app companion para Windows para detectar e baixar vídeos
 **sem proteção** (sem DRM). Uso pessoal.
 
 | Pasta | Conteúdo | Status |
 |---|---|---|
-| `extension/` | Extensão MV3 (WXT + TypeScript + Vue) | Sprints 1 e 2 ✅ |
-| `companion/` | App Tauri que executa yt-dlp/ffmpeg | Sprint 3 |
+| `extension/` | Extensão MV3 (WXT + TypeScript + Vue) | Sprints 1–3 ✅ |
+| `companion/` | Host nativo em Rust (Windows) que executa yt-dlp/ffmpeg | Sprint 3 ✅ ([detalhes](companion/README.md)) |
+
+## Instalação rápida (Windows)
+
+1. Em **Actions → CI**, abra a execução mais recente com sucesso e baixe os artefatos
+   `extension-chrome` e `MediaDown-companion-windows`.
+2. **Extensão:** `chrome://extensions` → *Modo do desenvolvedor* → *Carregar sem
+   compactação* → pasta `extension-chrome`.
+3. **App:** extraia `MediaDown-companion-windows` e dê dois cliques em `install.cmd`.
+4. Recarregue a extensão. O rodapé do popup deve mostrar "App MediaDown conectado".
 
 ## Extensão: desenvolvimento
 
@@ -52,9 +61,19 @@ npm run build     # gera .output/chrome-mv3
 - O background **revalida** cada pedido: só baixa mídia que está na lista da aba,
   sem proteção e progressiva. Uma mensagem forjada não consegue baixar URL
   arbitrária nem conteúdo com DRM, e isso tem teste E2E.
-- Limitação conhecida: sites com proteção contra hotlink (exigem `Referer`) falham no
+- Sites com proteção contra hotlink (exigem `Referer`) falham no
   download direto, porque a API de downloads não permite definir esse cabeçalho.
-  A extensão explica o motivo, e o companion (Sprint 3) vai resolver.
+  A extensão explica o motivo e oferece o download pelo app companion.
+
+## Download pelo app companion (Sprint 3)
+
+- **HLS e DASH** são baixados pelo app e salvos como MP4 (vídeo e áudio unidos pelo
+  ffmpeg). O nome do arquivo vem do título da página.
+- **Proteção contra hotlink:** quando o navegador recebe 403, o popup oferece
+  **Baixar com o app**, que envia a página como `Referer`.
+- **Qualidade** nas opções: melhor qualidade, até 1080p ou somente áudio (MP3).
+- Progresso com velocidade, cancelamento e **Mostrar na pasta** (abre o Explorer).
+- Se o app não estiver instalado, o popup explica o que fazer, em vez de falhar.
 
 ## Decisões registradas
 
@@ -62,3 +81,10 @@ npm run build     # gera .output/chrome-mv3
   normalmente vem de uma CDN em outro domínio, e o `webRequest` só enxerga hosts
   permitidos. Uma build para loja precisaria de permissão opcional pedida no popup.
 - Nenhum servidor: tudo roda localmente.
+- O `key` no manifesto fixa o ID da extensão (`jakijlbgipgbbaldfhhpglollgnldckh`), o
+  que permite ao app aceitar somente esta extensão. A chave privada não é necessária
+  para uso sem empacotar e não fica no repositório.
+- O companion é um host nativo em Rust **sem interface própria**, em vez de um app
+  Tauri: toda a interface já está no popup, e um binário de ~1,5 MB sem WebView é mais
+  simples e seguro. Se um dia for preciso uma janela de fila que sobreviva ao
+  navegador fechado, o Tauri pode envolver o mesmo núcleo.

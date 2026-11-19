@@ -4,13 +4,17 @@ import { toObservedResponse } from '@/core/response-headers';
 import { mergeMedia, applyInspection, visibleMedia } from '@/core/tab-media';
 import { updateTabMedia, clearTabMedia } from '@/core/tab-media-store';
 import { fetchAndInspectManifest } from '@/core/manifest-fetcher';
-import { parseRequest, type DownloadResponse } from '@/core/messages';
-import { startDownload } from '@/core/download-service';
+import { parseRequest, type ExtensionRequest } from '@/core/messages';
+import { startDownload, controlJob } from '@/core/download-service';
+import { companion, failStaleJobs } from '@/core/companion-client';
 
 const OBSERVED_TYPES = ['media', 'xmlhttprequest', 'other', 'object'] as const;
 const inspectionsInFlight = new Set<string>();
 
 export default defineBackground(() => {
+  // A restarted service worker has lost its native port, so jobs it was tracking are gone.
+  void failStaleJobs();
+
   browser.webRequest.onHeadersReceived.addListener(
     details => void handleResponse(details.tabId, details.url, details.statusCode, details.responseHeaders),
     { urls: ['<all_urls>'], types: [...OBSERVED_TYPES] },
@@ -25,13 +29,25 @@ export default defineBackground(() => {
 
   browser.tabs.onRemoved.addListener(tabId => void clearTabMedia(tabId));
 
-  browser.runtime.onMessage.addListener((message, sender): Promise<DownloadResponse> | undefined => {
+  browser.runtime.onMessage.addListener((message, sender): Promise<unknown> | undefined => {
     // Only our own extension pages (popup) may ask for downloads, never content in a web page.
     if (sender.id !== browser.runtime.id || sender.tab?.url?.startsWith('http')) return undefined;
     const request = parseRequest(message);
-    return request ? startDownload(request) : undefined;
+    return request ? handleRequest(request) : undefined;
   });
 });
+
+function handleRequest(request: ExtensionRequest): Promise<unknown> {
+  switch (request.type) {
+    case 'download':
+      return startDownload(request, companion);
+    case 'cancel':
+    case 'reveal':
+      return controlJob(request.type, request.tabId, request.mediaKey, companion).catch(() => false);
+    case 'companionStatus':
+      return companion.status();
+  }
+}
 
 async function handleResponse(tabId: number, url: string, statusCode: number, headers?: { name: string; value?: string }[]) {
   if (tabId < 0 || (statusCode !== 200 && statusCode !== 206)) return;

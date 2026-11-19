@@ -17,6 +17,11 @@ export async function readTabMedia(tabId: number): Promise<DetectedMedia[]> {
   return (stored[key] as DetectedMedia[] | undefined) ?? [];
 }
 
+export async function readAllTabIds(): Promise<number[]> {
+  const stored = await browser.storage.session.get(null);
+  return Object.keys(stored).map(tabIdFromStorageKey).filter((id): id is number => id !== null);
+}
+
 /** Read-modify-write serialized per tab, so concurrent webRequest events cannot overwrite each other. */
 export function updateTabMedia(tabId: number, update: (list: DetectedMedia[]) => DetectedMedia[]): Promise<DetectedMedia[]> {
   return enqueue(tabId, async () => {

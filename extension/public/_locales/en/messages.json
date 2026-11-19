@@ -69,10 +69,10 @@
     "message": "$1 received"
   },
   "needsCompanion": {
-    "message": "HLS/DASH downloads arrive with the companion app (Sprint 3)."
+    "message": "To download HLS/DASH, install the MediaDown app for Windows."
   },
   "errorForbidden": {
-    "message": "The server refused the direct download (hotlink protection). The companion app will handle this."
+    "message": "The server refused the download (access denied or hotlink protection)."
   },
   "errorExpired": {
     "message": "The link expired. Reload the page, press play and try again."
@@ -118,5 +118,56 @@
   },
   "optionsSaved": {
     "message": "Options saved."
+  },
+  "downloadWithApp": {
+    "message": "Download with the app"
+  },
+  "companionNotInstalled": {
+    "message": "The MediaDown app is not installed. Run install.cmd from the app package."
+  },
+  "companionEngineMissing": {
+    "message": "The MediaDown app is missing yt-dlp. Run install.cmd again."
+  },
+  "companionIncompatible": {
+    "message": "Could not talk to the MediaDown app. Reinstall it and reload the extension."
+  },
+  "companionStatusReady": {
+    "message": "MediaDown app connected · yt-dlp $1"
+  },
+  "companionStatusMissing": {
+    "message": "MediaDown app not installed: required for HLS/DASH."
+  },
+  "queued": {
+    "message": "Queued…"
+  },
+  "speed": {
+    "message": "$1/s"
+  },
+  "errorDrm": {
+    "message": "The content is DRM-protected and cannot be downloaded."
+  },
+  "errorEngineMissing": {
+    "message": "The MediaDown app is missing yt-dlp. Run install.cmd again."
+  },
+  "errorInvalidRequest": {
+    "message": "The app rejected the request as invalid."
+  },
+  "errorDisconnected": {
+    "message": "The connection to the app was lost (browser closed or app restarted)."
+  },
+  "optionsPresetLabel": {
+    "message": "Quality (app downloads)"
+  },
+  "optionsPresetHint": {
+    "message": "Applies to HLS/DASH and to downloads made by the MediaDown app. Direct files downloaded by the browser are saved as they are."
+  },
+  "presetBest": {
+    "message": "Best quality (MP4)"
+  },
+  "presetMax1080p": {
+    "message": "Up to 1080p (MP4)"
+  },
+  "presetAudioMp3": {
+    "message": "Audio only (MP3)"
   }
 }
