@@ -6,10 +6,23 @@ import type { DownloadRequest, DownloadResponse } from '@/core/messages';
 import { displayName, formatBytes } from '@/core/format';
 import { toTransferView, primaryAction, type BrowserDownloadStatus, type PrimaryAction } from '@/core/transfer-view';
 import { t, TRANSFER_ERROR_MESSAGE, REFUSAL_MESSAGE, type MessageKey } from '@/core/i18n';
+import { qualityOptions, defaultOption, type QualityOption } from '@/core/quality';
+import type { Preset } from '@/core/settings';
 
-const props = defineProps<{ media: DetectedMedia; tabId: number; browserStatus?: BrowserDownloadStatus; companionReady: boolean }>();
+const props = defineProps<{
+  media: DetectedMedia;
+  tabId: number;
+  browserStatus?: BrowserDownloadStatus;
+  companionReady: boolean;
+  defaultPreset: Preset;
+}>();
 
-const KIND_LABEL: Record<DetectedMedia['kind'], MessageKey> = { progressive: 'kindProgressive', hls: 'kindHls', dash: 'kindDash' };
+const KIND_LABEL: Record<DetectedMedia['kind'], MessageKey> = {
+  progressive: 'kindProgressive',
+  hls: 'kindHls',
+  dash: 'kindDash',
+  subtitle: 'kindSubtitle',
+};
 const PROTECTION_LABEL: Record<DetectedMedia['protection'], MessageKey> = {
   clear: 'protectionClear',
   protected: 'protectionProtected',
@@ -28,7 +41,20 @@ const locale = navigator.language;
 const name = computed(() => displayName(props.media.url));
 const host = computed(() => new URL(props.media.url).host);
 const isProtected = computed(() => props.media.protection === 'protected');
-const isStream = computed(() => props.media.kind !== 'progressive');
+const isStream = computed(() => props.media.kind === 'hls' || props.media.kind === 'dash');
+const heights = computed(() => props.media.heights ?? []);
+const options = computed(() => qualityOptions(heights.value));
+const selectedQuality = ref(defaultOption(heights.value, props.defaultPreset).value);
+const showQualityPicker = computed(
+  () => isStream.value && props.companionReady && !props.media.live && props.media.protection === 'clear' && action.value === 'download',
+);
+
+function optionLabel(option: QualityOption): string {
+  const top = heights.value[0];
+  if (option.choice.mode === 'best') return top ? t('qualityBestOf', String(top)) : t('qualityBest');
+  if (option.choice.mode === 'maxHeight') return t('qualityHeight', String(option.choice.height));
+  return t('qualityAudio');
+}
 const view = computed(() => toTransferView(props.media, props.browserStatus));
 const action = computed(() => primaryAction(props.media, view.value, props.companionReady));
 const isActive = computed(() => view.value.state === 'queued' || view.value.state === 'running');
@@ -55,7 +81,9 @@ const errorMessage = computed(() => {
   return view.value.state === 'failed' && view.value.error ? t(TRANSFER_ERROR_MESSAGE[view.value.error]) : '';
 });
 
-const showCompanionHint = computed(() => isStream.value && !isProtected.value && !props.companionReady && view.value.state === 'idle');
+const showCompanionHint = computed(
+  () => isStream.value && !isProtected.value && !props.media.live && !props.companionReady && view.value.state === 'idle',
+);
 
 async function runAction() {
   refusal.value = null;
@@ -83,7 +111,8 @@ async function runAction() {
 }
 
 async function requestDownload(via?: 'companion') {
-  const request: DownloadRequest = { type: 'download', tabId: props.tabId, mediaKey: props.media.key, ...(via && { via }) };
+  const quality = isStream.value ? options.value.find(o => o.value === selectedQuality.value)?.choice : undefined;
+  const request: DownloadRequest = { type: 'download', tabId: props.tabId, mediaKey: props.media.key, ...(via && { via }), ...(quality && { quality }) };
   const response = (await browser.runtime.sendMessage(request)) as DownloadResponse | undefined;
   if (!response?.ok) refusal.value = REFUSAL_MESSAGE[response?.reason ?? 'failed'];
 }
@@ -102,6 +131,7 @@ async function copyUrl() {
         <span class="item__name" :title="media.url">{{ name }}</span>
         <span class="item__meta">
           <span class="tag">{{ t(KIND_LABEL[media.kind]) }}</span>
+          <span v-if="media.live" class="tag tag--live">{{ t('live') }}</span>
           <span class="tag" :class="`tag--${media.protection}`">{{ t(PROTECTION_LABEL[media.protection]) }}</span>
           <span>{{ host }}</span>
           <span v-if="size">· {{ size }}</span>
@@ -109,6 +139,9 @@ async function copyUrl() {
       </div>
 
       <div v-if="!isProtected" class="item__actions">
+        <select v-if="showQualityPicker" v-model="selectedQuality" class="select" :aria-label="t('qualityLabel')">
+          <option v-for="option in options" :key="option.value" :value="option.value">{{ optionLabel(option) }}</option>
+        </select>
         <button
           v-if="action !== 'none'"
           class="button"
@@ -142,7 +175,9 @@ async function copyUrl() {
     </div>
 
     <span v-if="view.state === 'done'" class="item__ok">{{ t('downloadComplete') }}<template v-if="media.job?.fileName"> · {{ media.job.fileName }}</template></span>
+    <span v-if="media.subtitleLanguages?.length" class="item__hint">{{ t('subtitleTracks', media.subtitleLanguages.join(', ')) }}</span>
     <span v-if="isProtected" class="item__note">{{ t('drmExplanation') }}</span>
+    <span v-else-if="media.live" class="item__hint">{{ t('liveNotSupported') }}</span>
     <span v-else-if="showCompanionHint" class="item__hint">{{ t('needsCompanion') }}</span>
     <span v-if="errorMessage" class="item__note" role="alert">{{ errorMessage }}</span>
   </li>

@@ -29,7 +29,16 @@ export function applyInspection(list: readonly DetectedMedia[], key: string, ins
 
   const variantKeys = inspection.variantUrls.map(mediaKey);
   return list.map(item => {
-    if (item.key === key) return { ...item, protection: inspection.protection, variantKeys };
+    if (item.key === key) {
+      return {
+        ...item,
+        protection: inspection.protection,
+        variantKeys,
+        heights: inspection.heights,
+        live: inspection.live ?? undefined,
+        subtitleLanguages: inspection.subtitleLanguages,
+      };
+    }
     if (variantKeys.includes(item.key)) return { ...item, protection: inspection.protection };
     return item;
   });

@@ -10,6 +10,7 @@ pub enum ValidationError {
     InvalidUrl,
     InvalidHeader,
     InvalidJobId,
+    InvalidQuality,
 }
 
 pub fn validate_url(raw: &str) -> Result<Url, ValidationError> {

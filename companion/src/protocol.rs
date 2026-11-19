@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
 
-use crate::engine::Preset;
+use crate::engine::Quality;
 
-pub const PROTOCOL_VERSION: u32 = 1;
+/// v2: `quality` (best / maxHeight / audioMp3) replaces `preset`; adds `subtitles`.
+pub const PROTOCOL_VERSION: u32 = 2;
 /// Chrome refuses host-to-browser messages above 1 MB.
 const MAX_OUTGOING_BYTES: usize = 1024 * 1024;
 /// Our requests are tiny; anything bigger is a bug or an attack.
@@ -20,7 +21,8 @@ pub enum Request {
         user_agent: Option<String>,
         folder: String,
         file_name: String,
-        preset: Preset,
+        quality: Quality,
+        subtitles: bool,
     },
     Cancel { job_id: String },
     Reveal { job_id: String },
@@ -129,10 +131,16 @@ mod tests {
     #[test]
     fn parses_download_requests() {
         let request = parse_request(
-            br#"{"type":"download","jobId":"j1","url":"https://c.example.com/a.m3u8","referer":"https://example.com/aula","userAgent":"UA","folder":"Media Downloader","fileName":"Aula 1","preset":"best"}"#,
+            br#"{"type":"download","jobId":"j1","url":"https://c.example.com/a.m3u8","referer":"https://example.com/aula","userAgent":"UA","folder":"Media Downloader","fileName":"Aula 1","quality":{"mode":"maxHeight","height":720},"subtitles":true}"#,
         )
         .unwrap();
-        assert!(matches!(request, Request::Download { preset: Preset::Best, .. }));
+        assert!(matches!(request, Request::Download { quality: Quality::MaxHeight { height: 720 }, subtitles: true, .. }));
+    }
+
+    #[test]
+    fn rejects_version_1_requests_with_preset() {
+        let v1 = br#"{"type":"download","jobId":"j1","url":"https://c.example.com/a.m3u8","referer":null,"userAgent":null,"folder":"","fileName":"a","preset":"best"}"#;
+        assert!(parse_request(v1).is_err());
     }
 
     #[test]

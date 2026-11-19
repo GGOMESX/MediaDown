@@ -7,6 +7,7 @@ import { fetchAndInspectManifest } from '@/core/manifest-fetcher';
 import { parseRequest, type ExtensionRequest } from '@/core/messages';
 import { startDownload, controlJob } from '@/core/download-service';
 import { companion, failStaleJobs } from '@/core/companion-client';
+import { completePending, dropPending, pendingIdForDownload } from '@/core/history';
 
 const OBSERVED_TYPES = ['media', 'xmlhttprequest', 'other', 'object'] as const;
 const inspectionsInFlight = new Set<string>();
@@ -29,6 +30,8 @@ export default defineBackground(() => {
 
   browser.tabs.onRemoved.addListener(tabId => void clearTabMedia(tabId));
 
+  browser.downloads.onChanged.addListener(delta => void recordBrowserDownload(delta));
+
   browser.runtime.onMessage.addListener((message, sender): Promise<unknown> | undefined => {
     // Only our own extension pages (popup) may ask for downloads, never content in a web page.
     if (sender.id !== browser.runtime.id || sender.tab?.url?.startsWith('http')) return undefined;
@@ -49,6 +52,18 @@ function handleRequest(request: ExtensionRequest): Promise<unknown> {
   }
 }
 
+async function recordBrowserDownload(delta: { id: number; state?: { current?: string }; error?: { current?: string } }) {
+  const id = pendingIdForDownload(delta.id);
+  if (delta.state?.current === 'complete') {
+    const [item] = await browser.downloads.search({ id: delta.id });
+    const fileName = item?.filename.split(/[\\/]/).pop();
+    await completePending(id, { fileName, sizeBytes: item && item.fileSize > 0 ? item.fileSize : undefined });
+  } else if (delta.error?.current === 'USER_CANCELED') {
+    // Other interruptions can still be resumed with "Tentar novamente", so keep those pending.
+    await dropPending(id);
+  }
+}
+
 async function handleResponse(tabId: number, url: string, statusCode: number, headers?: { name: string; value?: string }[]) {
   if (tabId < 0 || (statusCode !== 200 && statusCode !== 206)) return;
 
@@ -63,7 +78,7 @@ async function handleResponse(tabId: number, url: string, statusCode: number, he
 }
 
 async function inspect(tabId: number, media: DetectedMedia) {
-  if (media.kind === 'progressive' || inspectionsInFlight.has(media.key)) return;
+  if ((media.kind !== 'hls' && media.kind !== 'dash') || inspectionsInFlight.has(media.key)) return;
   inspectionsInFlight.add(media.key);
   try {
     const inspection = await fetchAndInspectManifest(media.url, media.kind);

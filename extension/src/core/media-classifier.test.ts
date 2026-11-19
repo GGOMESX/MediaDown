@@ -57,6 +57,26 @@ describe('classifyRequest', () => {
   });
 });
 
+describe('classifyRequest (subtitles)', () => {
+  it.each([
+    ['https://c.example.com/legendas/pt-BR.vtt', ''],
+    ['https://c.example.com/track?id=3', 'text/vtt; charset=utf-8'],
+    ['https://c.example.com/aula-01.srt', 'application/octet-stream'],
+    ['https://c.example.com/subs/english_cc.webvtt', ''],
+  ])('detects whole subtitle files: %s', (url, contentType) => {
+    expect(classifyRequest({ url, contentType }, NOW)).toMatchObject({ kind: 'subtitle', protection: 'clear' });
+  });
+
+  it.each([
+    'https://c.example.com/subs/pt/fileSequence12.vtt',
+    'https://c.example.com/subs/pt/segment-3.vtt',
+    'https://c.example.com/subs/pt/0004.vtt',
+    'https://c.example.com/subs/pt/pt_00012.vtt',
+  ])('ignores HLS subtitle segments: %s', url => {
+    expect(classifyRequest({ url, contentType: 'text/vtt' }, NOW)).toBeNull();
+  });
+});
+
 describe('mediaKey', () => {
   it('ignores the query string so rotating CDN tokens do not create duplicates', () => {
     expect(mediaKey('https://cdn.example.com/a.mp4?t=1')).toBe(mediaKey('https://cdn.example.com/a.mp4?t=2'));

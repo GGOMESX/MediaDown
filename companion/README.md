@@ -28,9 +28,9 @@ extension (service worker) ──connectNative──► mediadown-host.exe
 
 | Module | Responsibility |
 |---|---|
-| `protocol.rs` | Framing (64 KB in / 1 MB out limits), typed messages with `deny_unknown_fields` |
+| `protocol.rs` | Framing (64 KB in / 1 MB out limits), typed messages with `deny_unknown_fields`, protocol v2 |
 | `validation.rs` | http/https URLs, header values without CR/LF, file and folder names safe on Windows, escaping `%` in the yt-dlp template |
-| `engine.rs` | yt-dlp arguments (`--ignore-config`, `--` before the URL, quality presets), progress parsing and error classification |
+| `engine.rs` | yt-dlp arguments (`--ignore-config`, `--` before the URL, quality `best`/`maxHeight`/`audioMp3`, subtitles as `.srt`), progress parsing and error classification |
 | `jobs.rs` | Queue (2 at a time), cancellation, "show in folder" only for files the host created |
 | `platform.rs` | Windows: Job Object `KILL_ON_JOB_CLOSE`, `CREATE_NO_WINDOW`, Explorer |
 
@@ -63,6 +63,8 @@ Environment variables honored by the host (tests only): `MEDIADOWN_YTDLP`,
 
 ### Updating yt-dlp or ffmpeg
 
-Update the version, URL and SHA-256 in `installer/engines.json` (and `YT_DLP_VERSION`
-in CI). Compute the hashes yourself from the official file; never copy them from a
-third party.
+- **yt-dlp:** automatic. The `Update yt-dlp` workflow opens a weekly PR, verified
+  against the official `SHA2-256SUMS`.
+- **ffmpeg:** manual. Update the version, URL and SHA-256 values in
+  `installer/engines.json`. Compute the hashes yourself from the official file;
+  never copy them from a third party.

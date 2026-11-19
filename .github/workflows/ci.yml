@@ -4,6 +4,8 @@ on:
   push:
     branches: [main, 'sprint-*']
   pull_request:
+  # Lets the yt-dlp update workflow run CI on the PR branch it creates.
+  workflow_dispatch:
 
 env:
   # Same yt-dlp version the Windows installer pins in companion/installer/engines.json.
@@ -35,6 +37,10 @@ jobs:
           sudo apt-get update && sudo apt-get install -y ffmpeg
           echo "MEDIADOWN_TEST_YTDLP=$(which yt-dlp)" >> "$GITHUB_ENV"
           echo "MEDIADOWN_TEST_FFMPEG_DIR=$(dirname "$(which ffmpeg)")" >> "$GITHUB_ENV"
+
+      - name: Update script tests
+        working-directory: .github/scripts
+        run: python -m unittest -v test_bump_ytdlp
 
       - name: Companion tests (unit + integration with real yt-dlp/ffmpeg)
         working-directory: companion

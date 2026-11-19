@@ -7,7 +7,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crate::engine::{self, DownloadSpec, EngineLine, EnginePaths, Preset};
+use crate::engine::{self, DownloadSpec, EngineLine, EnginePaths, Quality};
 use crate::platform::{self, ProcessTree};
 use crate::protocol::{ErrorCode, Event, PROTOCOL_VERSION, Request};
 use crate::validation::{self, ValidationError};
@@ -33,6 +33,12 @@ pub struct Config {
     pub max_concurrent: usize,
 }
 
+#[derive(Clone, Copy)]
+struct JobOptions {
+    quality: Quality,
+    subtitles: bool,
+}
+
 struct QueuedJob {
     id: String,
     url: String,
@@ -40,7 +46,8 @@ struct QueuedJob {
     user_agent: Option<String>,
     output_dir: PathBuf,
     stem: String,
-    preset: Preset,
+    quality: Quality,
+    subtitles: bool,
 }
 
 struct RunningJob {
@@ -80,8 +87,9 @@ impl JobManager {
     fn handle_request(&mut self, request: Request) {
         match request {
             Request::Hello { .. } => self.say_hello(),
-            Request::Download { job_id, url, referer, user_agent, folder, file_name, preset } => {
-                match self.validate_job(job_id.clone(), &url, referer, user_agent, &folder, &file_name, preset) {
+            Request::Download { job_id, url, referer, user_agent, folder, file_name, quality, subtitles } => {
+                let options = JobOptions { quality, subtitles };
+                match self.validate_job(job_id.clone(), &url, referer, user_agent, &folder, &file_name, options) {
                     Ok(job) => self.enqueue(job),
                     Err(error) => self.emit(Event::Failed { job_id, error: ErrorCode::InvalidRequest, detail: format!("{error:?}") }),
                 }
@@ -100,11 +108,14 @@ impl JobManager {
         user_agent: Option<String>,
         folder: &str,
         file_name: &str,
-        preset: Preset,
+        options: JobOptions,
     ) -> Result<QueuedJob, ValidationError> {
         let id = validation::validate_job_id(&job_id)?;
         if self.known_ids.contains(&id) {
             return Err(ValidationError::InvalidJobId);
+        }
+        if !options.quality.is_valid() {
+            return Err(ValidationError::InvalidQuality);
         }
         Ok(QueuedJob {
             id,
@@ -113,7 +124,8 @@ impl JobManager {
             user_agent: user_agent.as_deref().map(validation::validate_header_value).transpose()?,
             output_dir: validation::resolve_output_dir(&self.config.downloads_dir, folder),
             stem: validation::escape_output_template(&validation::sanitize_stem(file_name)),
-            preset,
+            quality: options.quality,
+            subtitles: options.subtitles,
         })
     }
 
@@ -162,7 +174,8 @@ impl JobManager {
             user_agent: job.user_agent.as_deref(),
             output_dir: &job.output_dir,
             output_stem: &job.stem,
-            preset: job.preset,
+            quality: job.quality,
+            subtitles: job.subtitles,
         };
         let mut command = Command::new(&engines.yt_dlp);
         command

@@ -49,7 +49,7 @@ const GENERIC_STREAM_STEM = /^(index|master|playlist|manifest|chunklist|stream|v
  */
 export function chooseStem(rawUrl: string, pageTitle: string): string {
   const { stem } = splitUrlFileName(rawUrl);
-  const withoutManifestExtension = stem.replace(/\.(m3u8|mpd)$/i, '');
+  const withoutManifestExtension = stem.replace(/\.(m3u8|mpd|vtt|webvtt|srt)$/i, '');
   const title = pageTitle.trim();
   const uninformative = GENERIC_STREAM_STEM.test(withoutManifestExtension) || MACHINE_GENERATED_STEM.test(withoutManifestExtension);
   const name = uninformative && title ? title : withoutManifestExtension;

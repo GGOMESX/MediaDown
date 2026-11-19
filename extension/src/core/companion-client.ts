@@ -2,16 +2,28 @@ import { browser, type Browser } from 'wxt/browser';
 import { parseHostEvent, tabIdFromJobId, applyHostEvent, failActiveJobs, type HostEvent } from './companion-job';
 import { updateTabMedia, readAllTabIds } from './tab-media-store';
 import type { CompanionStatus } from './messages';
+import type { QualityChoice } from './quality';
+import { completePending, dropPending, pendingIdForJob } from './history';
 
 export const NATIVE_HOST_NAME = 'com.mediadown.host';
-const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = 2;
 // The first yt-dlp start on Windows unpacks itself and can take a few seconds.
 const HELLO_TIMEOUT_MS = 20_000;
 const IDLE_DISCONNECT_MS = 15_000;
 const PROGRESS_WRITE_INTERVAL_MS = 300;
 
 export type HostRequest =
-  | { type: 'download'; jobId: string; url: string; referer?: string; userAgent?: string; folder: string; fileName: string; preset: string }
+  | {
+      type: 'download';
+      jobId: string;
+      url: string;
+      referer?: string;
+      userAgent?: string;
+      folder: string;
+      fileName: string;
+      quality: QualityChoice;
+      subtitles: boolean;
+    }
   | { type: 'cancel' | 'reveal'; jobId: string };
 
 /** What download-service needs from the companion; tests swap in a fake. */
@@ -109,6 +121,9 @@ class CompanionConnection implements CompanionGateway {
     if (event.type === 'done' || event.type === 'failed') {
       this.activeJobs.delete(event.jobId);
       this.lastProgressWrite.delete(event.jobId);
+      // Independent of the tab: it may have navigated away while the app was downloading.
+      if (event.type === 'done') void completePending(pendingIdForJob(event.jobId), { fileName: event.fileName });
+      else void dropPending(pendingIdForJob(event.jobId));
     }
 
     try {

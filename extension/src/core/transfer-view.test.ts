@@ -26,6 +26,10 @@ describe('primaryAction', () => {
     expect(primaryAction({ ...file, protection: 'protected' }, { via: 'browser', state: 'idle' }, true)).toBe('none');
   });
 
+  it('offers nothing for live streams', () => {
+    expect(primaryAction({ ...stream, live: true }, { via: 'browser', state: 'idle' }, true)).toBe('none');
+  });
+
   it('follows the transfer state', () => {
     expect(primaryAction(file, { via: 'browser', state: 'idle' }, false)).toBe('download');
     expect(primaryAction(file, { via: 'companion', state: 'queued' }, true)).toBe('cancel');

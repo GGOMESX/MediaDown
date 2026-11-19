@@ -5,8 +5,8 @@ Extensão de navegador + app companion para Windows para detectar e baixar víde
 
 | Pasta | Conteúdo | Status |
 |---|---|---|
-| `extension/` | Extensão MV3 (WXT + TypeScript + Vue) | Sprints 1–3 ✅ |
-| `companion/` | Host nativo em Rust (Windows) que executa yt-dlp/ffmpeg | Sprint 3 ✅ ([detalhes](companion/README.md)) |
+| `extension/` | Extensão MV3 (WXT + TypeScript + Vue) | Sprints 1–4 ✅ |
+| `companion/` | Host nativo em Rust (Windows) que executa yt-dlp/ffmpeg | Sprints 3–4 ✅ ([detalhes](companion/README.md)) |
 
 ## Instalação rápida (Windows)
 
@@ -74,6 +74,41 @@ npm run build     # gera .output/chrome-mv3
 - **Qualidade** nas opções: melhor qualidade, até 1080p ou somente áudio (MP3).
 - Progresso com velocidade, cancelamento e **Mostrar na pasta** (abre o Explorer).
 - Se o app não estiver instalado, o popup explica o que fazer, em vez de falhar.
+
+## Qualidade, legendas, lives e histórico (Sprint 4)
+
+- **Resolução por vídeo:** o popup lista as resoluções do stream (ex.: Melhor (1080p),
+  Até 720p, Só áudio). O padrão vem das opções.
+- **Legendas:**
+  - as legendas dos streams HLS/DASH são salvas como `.srt` ao lado do vídeo (pode
+    desativar nas opções);
+  - arquivos `.vtt` avulsos aparecem como **Legenda** e são convertidos para `.srt`;
+  - os segmentos de legenda dos streams não aparecem na lista.
+- **Lives:** transmissões ao vivo recebem a marca **Ao vivo** e não podem ser baixadas,
+  com a explicação na tela. Gravar uma live exige parar o yt-dlp de forma limpa no
+  Windows, o que fica para uma sprint futura.
+- **Histórico:** link "Histórico" no popup.
+  - Guarda até 200 downloads (nome, site, data, tamanho) e fica só no navegador.
+  - Pode ser limpo na própria página e desativado nas opções.
+- **Correção de segurança:** a criptografia declarada só nas playlists *variantes*
+  (o caso mais comum no HLS) agora é detectada. Antes, um stream assim podia aparecer
+  como "Sem proteção".
+- **Protocolo v2** entre extensão e app. Se só um dos dois for atualizado, o popup pede
+  para reinstalar o app em vez de falhar.
+
+## Atualização automática do yt-dlp
+
+O workflow `Update yt-dlp` roda toda segunda-feira (ou manualmente em **Actions**):
+
+1. Procura uma versão nova do yt-dlp.
+2. Baixa o `yt-dlp.exe` e confere o hash com o `SHA2-256SUMS` oficial.
+3. Atualiza `engines.json` e o CI.
+4. Abre um PR e roda o CI nele.
+
+Depois de mesclar, rode o `install.cmd` de novo para receber a versão nova.
+
+Requer, uma vez, em **Settings → Actions → General → Workflow permissions**: marcar
+*Allow GitHub Actions to create and approve pull requests*.
 
 ## Decisões registradas
 

@@ -169,5 +169,65 @@
   },
   "presetAudioMp3": {
     "message": "Audio only (MP3)"
+  },
+  "kindSubtitle": {
+    "message": "Subtitle"
+  },
+  "live": {
+    "message": "Live"
+  },
+  "liveNotSupported": {
+    "message": "Live stream: recording is not supported yet. Download it once it ends and becomes a recorded video."
+  },
+  "qualityLabel": {
+    "message": "Quality"
+  },
+  "qualityBest": {
+    "message": "Best"
+  },
+  "qualityBestOf": {
+    "message": "Best ($1p)"
+  },
+  "qualityHeight": {
+    "message": "Up to $1p"
+  },
+  "qualityAudio": {
+    "message": "Audio only (MP3)"
+  },
+  "subtitleTracks": {
+    "message": "Subtitles: $1"
+  },
+  "optionsSubtitlesLabel": {
+    "message": "Download subtitles of HLS/DASH videos when available (saved as .srt next to the video)"
+  },
+  "openHistory": {
+    "message": "History"
+  },
+  "historyTitle": {
+    "message": "Download history"
+  },
+  "historyEmpty": {
+    "message": "No finished downloads yet."
+  },
+  "historyClear": {
+    "message": "Clear history"
+  },
+  "historyClearConfirm": {
+    "message": "Delete the whole history? Downloaded files are not affected."
+  },
+  "historyViaBrowser": {
+    "message": "browser"
+  },
+  "historyViaCompanion": {
+    "message": "app"
+  },
+  "historyDisabled": {
+    "message": "History is turned off in the options."
+  },
+  "historyPrivacy": {
+    "message": "Stays in this browser only and is never sent anywhere. Keeps up to 200 downloads."
+  },
+  "optionsHistoryLabel": {
+    "message": "Keep download history (this browser only)"
   }
 }

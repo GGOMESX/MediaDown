@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -111,6 +111,80 @@ test('options page sanitizes and applies the destination folder', async () => {
   await popup.close();
 });
 
+test('manifest does not override any browser page', async () => {
+  const manifest = JSON.parse(await readFile(path.join(EXTENSION_PATH, 'manifest.json'), 'utf8'));
+  assert.equal(manifest.chrome_url_overrides, undefined);
+});
+
+test('flags live streams, catches encryption hidden in variants, lists resolutions and subtitles', async () => {
+  const page = await context.newPage();
+  await page.goto(`${server.origin}/features.html`);
+  const tabId = await tabIdOf(page);
+  await waitFor(async () => {
+    const media = await mediaOfTab(tabId);
+    return media.length >= 4 && media.filter(m => m.kind === 'hls').every(m => m.protection !== 'unknown');
+  });
+  const byPath = Object.fromEntries((await mediaOfTab(tabId)).map(m => [new URL(m.url).pathname, m]));
+
+  assert.equal(byPath['/live/index.m3u8'].live, true);
+  assert.equal(byPath['/sneaky/master.m3u8'].protection, 'protected', 'encryption declared only in the variant');
+  assert.deepEqual(byPath['/multi/master.m3u8'].heights, [1080, 720, 360]);
+  assert.equal(byPath['/multi/master.m3u8'].live, false);
+  assert.deepEqual(byPath['/multi/master.m3u8'].subtitleLanguages, ['pt-BR']);
+  assert.equal(byPath['/legendas/pt-BR.vtt'].kind, 'subtitle');
+  assert.equal(byPath['/subs-seg/pt/fileSequence1.vtt'], undefined, 'subtitle segments are not listed');
+
+  const popup = await openPopupWithMediaOf(tabId);
+  const live = itemNamed(popup, 'live/index.m3u8');
+  await live.getByText('Ao vivo', { exact: true }).waitFor();
+  await live.getByText('a gravação ainda não é suportada', { exact: false }).waitFor();
+  assert.equal(await live.getByRole('button', { name: 'Baixar' }).count(), 0);
+  await itemNamed(popup, 'multi/master.m3u8').getByText('Legendas: pt-BR').waitFor();
+  if (process.env.MEDIADOWN_E2E_SCREENSHOTS) {
+    await popup.screenshot({ path: path.join(process.env.MEDIADOWN_E2E_SCREENSHOTS, 'popup-sprint4.png'), fullPage: true });
+  }
+  await popup.close();
+  await page.close();
+});
+
+test('downloads a WebVTT subtitle converted to SRT', async () => {
+  const page = await context.newPage();
+  await page.goto(`${server.origin}/features.html`);
+  const tabId = await tabIdOf(page);
+  await waitFor(async () => (await mediaOfTab(tabId)).some(m => m.kind === 'subtitle'));
+
+  const popup = await openPopupWithMediaOf(tabId);
+  const subtitle = itemNamed(popup, 'pt-BR.vtt');
+  await subtitle.getByText('Legenda', { exact: true }).waitFor();
+  await subtitle.getByRole('button', { name: 'Baixar', exact: true }).click();
+  await subtitle.getByText('Concluído').waitFor();
+
+  const [item] = await worker.evaluate(() => chrome.downloads.search({ orderBy: ['-startTime'], limit: 1 }));
+  assert.match(item.filename, /pt-BR\.srt$/);
+  assert.equal((await readFile(item.filename, 'utf8')).replace(/^\uFEFF/, ''), '1\n00:00:01,000 --> 00:00:02,500\nOlá, turma\n');
+  await popup.close();
+  await page.close();
+});
+
+test('history lists finished downloads and can be cleared', async () => {
+  // Started on behalf of the real page tab (as the popup does), so title and site are known.
+  const tabId = await videoTabId();
+  const video = (await mediaOfTab(tabId)).find(m => m.url.includes('minha%20aula'));
+  const history = await context.newPage();
+  await history.goto(`chrome-extension://${extensionId}/downloads-history.html`);
+  const response = await history.evaluate(m => chrome.runtime.sendMessage(m), { type: 'download', tabId, mediaKey: video.key });
+  assert.equal(response.ok, true);
+  await history.getByText('minha aula.mp4').first().waitFor();
+  await history.getByText('pt-BR.srt').waitFor();
+  await history.getByText('Aula de teste').waitFor();
+  assert.ok(await history.getByText('127.0.0.1', { exact: false }).count() > 0, 'page host recorded');
+
+  history.once('dialog', dialog => dialog.accept());
+  await history.getByRole('button', { name: 'Limpar histórico' }).click();
+  await history.getByText('Nenhum download concluído ainda.').waitFor();
+  await history.close();
+});
+
 test('clears the list when the tab navigates away', async () => {
   const tabId = await videoTabId();
   await videoPage.goto(`${server.origin}/empty.html`);
@@ -131,6 +205,11 @@ async function openPopupWithMediaOf(sourceTabId) {
 }
 
 const itemNamed = (page, name) => page.locator('.item').filter({ has: page.locator('.item__name', { hasText: name }) });
+
+async function tabIdOf(page) {
+  const url = page.url();
+  return worker.evaluate(async u => (await chrome.tabs.query({})).find(t => t.url === u)?.id, url);
+}
 
 async function videoTabId() {
   return worker.evaluate(async url => (await chrome.tabs.query({})).find(t => t.url?.startsWith(url))?.id, server.origin);

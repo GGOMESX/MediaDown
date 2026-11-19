@@ -32,7 +32,7 @@ export function toTransferView(media: DetectedMedia, browserStatus: BrowserDownl
 export type PrimaryAction = 'download' | 'downloadWithApp' | 'retry' | 'downloadAgain' | 'cancel' | 'showInFolder' | 'none';
 
 export function primaryAction(media: DetectedMedia, view: TransferView, companionReady: boolean): PrimaryAction {
-  if (media.protection !== 'clear') return 'none';
+  if (media.protection !== 'clear' || media.live) return 'none';
   switch (view.state) {
     case 'queued':
     case 'running':

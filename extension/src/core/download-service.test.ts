@@ -64,7 +64,7 @@ describe('startDownload', () => {
   });
 
   it('honors the "ask where to save" setting', async () => {
-    await saveSettings({ folder: '', askWhereToSave: true, preset: 'best' });
+    await saveSettings({ folder: '', askWhereToSave: true, preset: 'best', subtitles: true, keepHistory: true });
     await seed(media({}));
 
     await startDownload({ type: 'download', tabId: TAB, mediaKey: 'https://c.example.com/aula.mp4' }, fakeCompanion().gateway);
@@ -133,7 +133,7 @@ describe('startDownload via companion', () => {
   });
 
   it('sends HLS jobs to the companion with referer, title-based name and preset', async () => {
-    await saveSettings({ folder: 'Cursos', askWhereToSave: false, preset: 'max1080p' });
+    await saveSettings({ folder: 'Cursos', askWhereToSave: false, preset: 'max1080p', subtitles: true, keepHistory: true });
     await seed(HLS);
     const { gateway, sent } = fakeCompanion();
 
@@ -150,7 +150,8 @@ describe('startDownload via companion', () => {
       userAgent: navigator.userAgent,
       folder: 'Cursos',
       fileName: 'Aula 3_ Ownership',
-      preset: 'max1080p',
+      quality: { mode: 'maxHeight', height: 1080 },
+      subtitles: true,
     }]);
     expect((await readTabMedia(TAB))[0]?.job).toEqual({ id: jobId, state: 'queued' });
     expect(fakeBrowser.downloads.download).not.toHaveBeenCalled();
@@ -166,6 +167,20 @@ describe('startDownload via companion', () => {
     expect(await startDownload({ type: 'download', tabId: TAB, mediaKey: HLS.key }, gateway)).toEqual({ ok: false, reason });
     expect(sent).toEqual([]);
     expect((await readTabMedia(TAB))[0]?.job).toBeUndefined();
+  });
+
+  it('uses the quality picked in the popup over the default preset', async () => {
+    await seed(HLS);
+    const { gateway, sent } = fakeCompanion();
+    await startDownload({ type: 'download', tabId: TAB, mediaKey: HLS.key, quality: { mode: 'audioMp3' } }, gateway);
+    expect(sent[0]).toMatchObject({ quality: { mode: 'audioMp3' } });
+  });
+
+  it('refuses live streams', async () => {
+    await seed({ ...HLS, live: true });
+    const { gateway, sent } = fakeCompanion();
+    expect(await startDownload({ type: 'download', tabId: TAB, mediaKey: HLS.key }, gateway)).toEqual({ ok: false, reason: 'live' });
+    expect(sent).toEqual([]);
   });
 
   it('routes a progressive file to the companion on request (hotlink fallback)', async () => {
@@ -200,5 +215,46 @@ describe('controlJob', () => {
     const { gateway, sent } = fakeCompanion();
     expect(await controlJob('reveal', TAB, 'https://c.example.com/aula.mp4', gateway)).toBe(false);
     expect(sent).toEqual([]);
+  });
+});
+
+describe('startDownload of subtitle files', () => {
+  let download: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fakeBrowser.reset();
+    download = vi.fn().mockResolvedValue(55);
+    fakeBrowser.downloads.download = download as never;
+    fakeBrowser.tabs.get = vi.fn().mockResolvedValue({ id: TAB, title: 'Aula 2', url: 'https://curso.example.com/2' }) as never;
+  });
+
+  it('converts WebVTT to SRT and saves it named after the file', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nOlá\n')));
+    const subtitle = media({ kind: 'subtitle', key: 'https://c.example.com/legendas/pt-BR.vtt', url: 'https://c.example.com/legendas/pt-BR.vtt', contentType: 'text/vtt' });
+    await seed(subtitle);
+
+    const response = await startDownload({ type: 'download', tabId: TAB, mediaKey: subtitle.key }, fakeCompanion().gateway);
+
+    expect(response).toEqual({ ok: true, via: 'browser', downloadId: 55 });
+    const { url, filename } = download.mock.calls[0]![0] as { url: string; filename: string };
+    expect(filename).toBe('Media Downloader/pt-BR.srt');
+    expect(decodeURIComponent(url.split(',')[1]!)).toBe('\uFEFF1\n00:00:01,000 --> 00:00:02,000\nOlá\n');
+    vi.unstubAllGlobals();
+  });
+
+  it('downloads .srt files directly', async () => {
+    const subtitle = media({ kind: 'subtitle', key: 'https://c.example.com/s/aula.srt', url: 'https://c.example.com/s/aula.srt?t=1', contentType: '' });
+    await seed(subtitle);
+    await startDownload({ type: 'download', tabId: TAB, mediaKey: subtitle.key }, fakeCompanion().gateway);
+    expect(download).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://c.example.com/s/aula.srt?t=1', filename: 'Media Downloader/aula.srt' }));
+  });
+
+  it('fails cleanly when the file has no cues', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('WEBVTT\n')));
+    const subtitle = media({ kind: 'subtitle', key: 'https://c.example.com/x.vtt', url: 'https://c.example.com/x.vtt', contentType: 'text/vtt' });
+    await seed(subtitle);
+    expect(await startDownload({ type: 'download', tabId: TAB, mediaKey: subtitle.key }, fakeCompanion().gateway)).toEqual({ ok: false, reason: 'failed' });
+    expect(download).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

@@ -1,0 +1,79 @@
+name: Update yt-dlp
+
+# yt-dlp changes often as sites change. Once a week, check for a new release and open a PR
+# with the new version and its SHA-256, so the installer keeps pinning a verified build.
+on:
+  schedule:
+    - cron: '17 10 * * 1'   # Mondays, 10:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find the latest release
+        id: release
+        run: |
+          latest=$(gh release view --repo yt-dlp/yt-dlp --json tagName -q .tagName)
+          current=$(python3 .github/scripts/bump_ytdlp.py --current)
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "branch=bot/yt-dlp-$latest" >> "$GITHUB_OUTPUT"
+          echo "yt-dlp: pinned $current, latest $latest"
+
+      - name: Skip if up to date or a PR already exists
+        id: check
+        run: |
+          if [ "${{ steps.release.outputs.latest }}" = "${{ steps.release.outputs.current }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"; echo "Already up to date."
+          elif git ls-remote --exit-code --heads origin "${{ steps.release.outputs.branch }}" >/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"; echo "Update branch already exists."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download and verify yt-dlp.exe
+        if: steps.check.outputs.skip == 'false'
+        id: verify
+        run: |
+          version="${{ steps.release.outputs.latest }}"
+          mkdir -p "$RUNNER_TEMP/yt-dlp" && cd "$RUNNER_TEMP/yt-dlp"
+          gh release download "$version" --repo yt-dlp/yt-dlp --pattern 'yt-dlp.exe' --pattern 'SHA2-256SUMS'
+          expected=$(awk '$2 == "yt-dlp.exe" { print $1 }' SHA2-256SUMS)
+          actual=$(sha256sum yt-dlp.exe | cut -d' ' -f1)
+          if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+            echo "::error::yt-dlp.exe hash $actual does not match SHA2-256SUMS ($expected)"; exit 1
+          fi
+          echo "sha256=$actual" >> "$GITHUB_OUTPUT"
+
+      - name: Open the update PR and run CI on it
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          version="${{ steps.release.outputs.latest }}"
+          branch="${{ steps.release.outputs.branch }}"
+          python3 .github/scripts/bump_ytdlp.py "$version" "${{ steps.verify.outputs.sha256 }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git commit -am "Update yt-dlp to $version"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "Update yt-dlp to $version" \
+            --body "Automated update from ${{ steps.release.outputs.current }} to [$version](https://github.com/yt-dlp/yt-dlp/releases/tag/$version).
+
+          - \`yt-dlp.exe\` SHA-256 \`${{ steps.verify.outputs.sha256 }}\`, checked against the release's \`SHA2-256SUMS\`.
+          - CI was started on this branch by the workflow (PRs opened by \`GITHUB_TOKEN\` do not trigger it on their own).
+
+          Merge once CI is green; then reinstall the companion (\`install.cmd\`) to get the new engine."
+          # Pushes made with GITHUB_TOKEN do not trigger workflows; workflow_dispatch is the exception.
+          gh workflow run ci.yml --ref "$branch"

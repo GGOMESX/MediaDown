@@ -75,7 +75,7 @@ test('popup reports the connected companion and its yt-dlp version', { skip }, a
 
 test('downloads an HLS stream as MP4 named after the page', { skip }, async () => {
   const tabId = await tabIdOf(origin);
-  const hls = (await mediaOf(tabId)).find(m => m.kind === 'hls');
+  const hls = (await mediaOf(tabId)).find(m => m.url.includes('/hls/index.m3u8'));
   const response = await sendFromExtension({ type: 'download', tabId, mediaKey: hls.key });
   assert.equal(response.via, 'companion');
 
@@ -95,7 +95,7 @@ test('falls back to the companion for hotlink-protected files, sending the page 
 
 test('the popup button downloads a stream end to end', { skip }, async () => {
   const popup = await openPopupWith(await tabIdOf(origin));
-  const item = popup.locator('.item').filter({ has: popup.locator('.tag', { hasText: 'HLS' }) });
+  const item = popup.locator('.item').filter({ has: popup.locator('.item__name', { hasText: 'hls/index.m3u8' }) });
   await item.getByRole('button', { name: 'Baixar', exact: true }).click();
   await item.getByText('Concluído').waitFor({ timeout: 60_000 });
   await item.getByRole('button', { name: 'Mostrar na pasta' }).waitFor();
@@ -103,6 +103,25 @@ test('the popup button downloads a stream end to end', { skip }, async () => {
   if (process.env.MEDIADOWN_E2E_SCREENSHOTS) {
     await popup.screenshot({ path: path.join(process.env.MEDIADOWN_E2E_SCREENSHOTS, 'popup-companion.png') });
   }
+  await popup.close();
+});
+
+test('the quality picker downloads the chosen resolution', { skip }, async () => {
+  const tabId = await tabIdOf(origin);
+  await waitFor(async () => (await mediaOf(tabId)).find(m => m.url.includes('/multi/'))?.heights?.length === 2);
+  const popup = await openPopupWith(tabId);
+  const item = popup.locator('.item').filter({ has: popup.locator('.item__name', { hasText: 'multi/master.m3u8' }) });
+  const picker = item.getByRole('combobox', { name: 'Qualidade' });
+  await picker.waitFor(); // shown once the popup knows the companion is ready
+  assert.deepEqual(await picker.locator('option').allTextContents(), ['Melhor (240p)', 'Até 144p', 'Só áudio (MP3)']);
+
+  await picker.selectOption({ label: 'Até 144p' });
+  await item.getByRole('button', { name: 'Baixar', exact: true }).click();
+  await item.getByText('Concluído').waitFor({ timeout: 60_000 });
+
+  const popupTabId = await popup.evaluate(async () => (await chrome.tabs.getCurrent()).id);
+  const job = (await mediaOf(popupTabId)).find(m => m.url.includes('/multi/')).job;
+  assert.equal(videoSize(path.join(dirs.downloads, 'Media Downloader', job.fileName)), '256x144');
   await popup.close();
 });
 
@@ -116,12 +135,32 @@ function generateMedia(dir) {
   execFileSync('mkdir', ['-p', path.join(dir, 'hls')]);
   run([...source, ...encode, '-f', 'hls', '-hls_time', '1', '-hls_playlist_type', 'vod', 'hls/index.m3u8']);
   run([...source, ...encode, '-movflags', '+faststart', 'real.mp4']);
+  for (const [height, width] of [[240, 320], [144, 256]]) {
+    execFileSync('mkdir', ['-p', path.join(dir, `multi/${height}`)]);
+    run([...source, '-vf', `scale=${width}:${height}`, ...encode, '-f', 'hls', '-hls_time', '1', '-hls_playlist_type', 'vod', `multi/${height}/index.m3u8`]);
+  }
+  execFileSync('sh', ['-c', `printf '%s' "$0" > multi/master.m3u8`, [
+    '#EXTM3U',
+    '#EXT-X-STREAM-INF:BANDWIDTH=600000,RESOLUTION=320x240', '240/index.m3u8',
+    '#EXT-X-STREAM-INF:BANDWIDTH=200000,RESOLUTION=256x144', '144/index.m3u8', '',
+  ].join('\n')], { cwd: dir });
+}
+
+function videoSize(file) {
+  const ffmpeg = path.join(FFMPEG_DIR, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+  let info = '';
+  try {
+    execFileSync(ffmpeg, ['-hide_banner', '-i', file], { stdio: 'pipe' });
+  } catch (error) {
+    info = String(error.stderr); // ffmpeg exits non-zero without an output file, after printing stream info
+  }
+  return info.match(/Video:.*?\b(\d{2,5}x\d{2,5})\b/)?.[1];
 }
 
 async function serve(root) {
   const page = `<!doctype html><title>Aula 7 — Introdução ao Rust</title>
     <video src="/hotlink/real.mp4" preload="auto" muted></video>
-    <script>fetch('/hls/index.m3u8')</script>`;
+    <script>fetch('/hls/index.m3u8'); fetch('/multi/master.m3u8')</script>`;
   const types = { '.m3u8': 'application/vnd.apple.mpegurl', '.ts': 'video/mp2t', '.mp4': 'video/mp4' };
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');

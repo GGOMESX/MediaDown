@@ -26,6 +26,7 @@ export const TRANSFER_ERROR_MESSAGE: Record<TransferError, MessageKey> = {
 export const REFUSAL_MESSAGE: Record<DownloadRefusal, MessageKey> = {
   notFound: 'refusalNotFound',
   protected: 'drmExplanation',
+  live: 'liveNotSupported',
   failed: 'refusalFailed',
   companionNotInstalled: 'companionNotInstalled',
   companionEngineMissing: 'companionEngineMissing',

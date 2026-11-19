@@ -169,5 +169,65 @@
   },
   "presetAudioMp3": {
     "message": "Somente áudio (MP3)"
+  },
+  "kindSubtitle": {
+    "message": "Legenda"
+  },
+  "live": {
+    "message": "Ao vivo"
+  },
+  "liveNotSupported": {
+    "message": "Transmissão ao vivo: a gravação ainda não é suportada. Baixe depois que ela terminar e virar vídeo gravado."
+  },
+  "qualityLabel": {
+    "message": "Qualidade"
+  },
+  "qualityBest": {
+    "message": "Melhor"
+  },
+  "qualityBestOf": {
+    "message": "Melhor ($1p)"
+  },
+  "qualityHeight": {
+    "message": "Até $1p"
+  },
+  "qualityAudio": {
+    "message": "Só áudio (MP3)"
+  },
+  "subtitleTracks": {
+    "message": "Legendas: $1"
+  },
+  "optionsSubtitlesLabel": {
+    "message": "Baixar as legendas dos vídeos HLS/DASH quando houver (salvas como .srt ao lado do vídeo)"
+  },
+  "openHistory": {
+    "message": "Histórico"
+  },
+  "historyTitle": {
+    "message": "Histórico de downloads"
+  },
+  "historyEmpty": {
+    "message": "Nenhum download concluído ainda."
+  },
+  "historyClear": {
+    "message": "Limpar histórico"
+  },
+  "historyClearConfirm": {
+    "message": "Apagar todo o histórico? Os arquivos baixados não são afetados."
+  },
+  "historyViaBrowser": {
+    "message": "navegador"
+  },
+  "historyViaCompanion": {
+    "message": "app"
+  },
+  "historyDisabled": {
+    "message": "O histórico está desativado nas opções."
+  },
+  "historyPrivacy": {
+    "message": "Fica só neste navegador e nunca é enviado a lugar nenhum. Guarda até 200 downloads."
+  },
+  "optionsHistoryLabel": {
+    "message": "Manter histórico de downloads (somente neste navegador)"
   }
 }

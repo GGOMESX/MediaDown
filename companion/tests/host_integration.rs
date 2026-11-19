@@ -49,6 +49,36 @@ fn generate_media(tools: &Tools, dir: &Path) {
     std::fs::create_dir_all(dir.join("hls")).unwrap();
     run(&[&source[..], &["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-f", "hls", "-hls_time", "1", "-hls_playlist_type", "vod", "hls/index.m3u8"]].concat());
     run(&[&source[..], &["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "+faststart", "video.mp4"]].concat());
+
+    // Two renditions behind a master playlist, plus a Portuguese subtitle track.
+    for (height, width) in [(240, 320), (120, 160)] {
+        std::fs::create_dir_all(dir.join(format!("multi/{height}"))).unwrap();
+        let scale = format!("scale={width}:{height}");
+        let output = format!("multi/{height}/index.m3u8");
+        run(&[&source[..], &["-vf", &scale, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-f", "hls", "-hls_time", "1", "-hls_playlist_type", "vod", &output]].concat());
+    }
+    std::fs::create_dir_all(dir.join("multi/subs")).unwrap();
+    std::fs::write(dir.join("multi/subs/pt.vtt"), "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nOlá, mundo\n").unwrap();
+    std::fs::write(dir.join("multi/subs/pt.m3u8"), "#EXTM3U\n#EXT-X-TARGETDURATION:3\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:3.0,\npt.vtt\n#EXT-X-ENDLIST\n").unwrap();
+    std::fs::write(
+        dir.join("multi/master.m3u8"),
+        concat!(
+            "#EXTM3U\n",
+            "#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"Português\",LANGUAGE=\"pt\",URI=\"subs/pt.m3u8\"\n",
+            "#EXT-X-STREAM-INF:BANDWIDTH=600000,RESOLUTION=320x240,SUBTITLES=\"subs\"\n240/index.m3u8\n",
+            "#EXT-X-STREAM-INF:BANDWIDTH=200000,RESOLUTION=160x120,SUBTITLES=\"subs\"\n120/index.m3u8\n",
+        ),
+    )
+    .unwrap();
+}
+
+/// Frame size of a video file, read from ffmpeg's stream summary (no ffprobe needed).
+fn video_size(tools: &Tools, file: &Path) -> String {
+    let ffmpeg = tools.ffmpeg_dir.join(if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" });
+    let output = Command::new(ffmpeg).args(["-hide_banner", "-i"]).arg(file).output().unwrap();
+    let info = String::from_utf8_lossy(&output.stderr).into_owned();
+    let video_line = info.lines().find(|l| l.contains("Video:")).unwrap_or_else(|| panic!("no video stream: {info}"));
+    video_line.split([',', ' ']).find(|part| part.contains('x') && part.split('x').all(|n| n.parse::<u32>().is_ok())).unwrap().to_owned()
 }
 
 // ---------- tiny HTTP server ----------
@@ -100,7 +130,13 @@ fn serve(mut stream: TcpStream, root: &Path) -> std::io::Result<()> {
     let Ok(body) = std::fs::read(root.join(file.trim_start_matches('/'))) else {
         return stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
     };
-    let content_type = if file.ends_with(".m3u8") { "application/vnd.apple.mpegurl" } else { "video/mp4" };
+    let content_type = if file.ends_with(".m3u8") {
+        "application/vnd.apple.mpegurl"
+    } else if file.ends_with(".vtt") {
+        "text/vtt"
+    } else {
+        "video/mp4"
+    };
     write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len())?;
     if slow {
         for chunk in body.chunks(4096) {
@@ -184,11 +220,15 @@ impl Drop for Host {
     }
 }
 
-fn download(job_id: &str, url: &str, referer: Option<&str>, file_name: &str, preset: &str) -> Value {
+fn download(job_id: &str, url: &str, referer: Option<&str>, file_name: &str, quality: Value) -> Value {
     json!({
         "type": "download", "jobId": job_id, "url": url, "referer": referer, "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "folder": "Media Downloader", "fileName": file_name, "preset": preset
+        "folder": "Media Downloader", "fileName": file_name, "quality": quality, "subtitles": false
     })
+}
+
+fn best() -> Value {
+    json!({ "mode": "best" })
 }
 
 fn is_final(job_id: &str) -> impl Fn(&Value) -> bool + '_ {
@@ -221,7 +261,7 @@ fn downloads_hls_into_mp4_with_progress() {
     let (_media, server) = fixtures(&tools);
     let mut host = Host::start(&tools);
 
-    host.send(download("hls1", &format!("{}/hls/index.m3u8", server.origin), None, "Aula 1 — Introdução 100%", "best"));
+    host.send(download("hls1", &format!("{}/hls/index.m3u8", server.origin), None, "Aula 1 — Introdução 100%", best()));
     let events = host.wait_for(is_final("hls1"));
 
     let types: Vec<&str> = events.iter().map(|e| e["type"].as_str().unwrap()).collect();
@@ -244,10 +284,10 @@ fn sends_referer_so_hotlink_protected_files_work() {
     let mut host = Host::start(&tools);
 
     let url = format!("{}/hotlink/video.mp4", server.origin);
-    host.send(download("with-ref", &url, Some(&format!("{}/aula.html", server.origin)), "com referer", "best"));
+    host.send(download("with-ref", &url, Some(&format!("{}/aula.html", server.origin)), "com referer", best()));
     assert_eq!(host.wait_for(is_final("with-ref")).last().unwrap()["type"], "done");
 
-    host.send(download("no-ref", &url, None, "sem referer", "best"));
+    host.send(download("no-ref", &url, None, "sem referer", best()));
     let failed = host.wait_for(is_final("no-ref")).pop().unwrap();
     assert_eq!(failed["type"], "failed");
     assert_eq!(failed["error"], "forbidden", "{failed:#?}");
@@ -259,7 +299,7 @@ fn extracts_audio_as_mp3() {
     let (_media, server) = fixtures(&tools);
     let mut host = Host::start(&tools);
 
-    host.send(download("mp3", &format!("{}/video.mp4", server.origin), None, "trilha", "audioMp3"));
+    host.send(download("mp3", &format!("{}/video.mp4", server.origin), None, "trilha", json!({ "mode": "audioMp3" })));
     let done = host.wait_for(is_final("mp3")).pop().unwrap();
     assert_eq!(done["fileName"], "trilha.mp3", "{done:#?}");
     assert!(host.downloads.path().join("Media Downloader/trilha.mp3").is_file());
@@ -271,7 +311,7 @@ fn cancels_a_running_download() {
     let (_media, server) = fixtures(&tools);
     let mut host = Host::start(&tools);
 
-    host.send(download("slow", &format!("{}/slow/video.mp4", server.origin), None, "lento", "best"));
+    host.send(download("slow", &format!("{}/slow/video.mp4", server.origin), None, "lento", best()));
     host.wait_for(|e| e["jobId"] == "slow" && e["type"] == "progress");
     host.send(json!({ "type": "cancel", "jobId": "slow" }));
     let canceled = host.wait_for(is_final("slow")).pop().unwrap();
@@ -283,7 +323,7 @@ fn rejects_invalid_requests_without_running_anything() {
     let tools = require_tools!();
     let mut host = Host::start(&tools);
 
-    host.send(download("bad-url", "file:///etc/passwd", None, "x", "best"));
+    host.send(download("bad-url", "file:///etc/passwd", None, "x", best()));
     let failed = host.wait_for(is_final("bad-url")).pop().unwrap();
     assert_eq!(failed["error"], "invalidRequest");
 
@@ -292,6 +332,50 @@ fn rejects_invalid_requests_without_running_anything() {
 
     host.send(json!({ "type": "reveal", "jobId": "never-existed" }));
     host.wait_for(|e| e["type"] == "invalidRequest");
+}
+
+#[test]
+fn picks_the_requested_resolution() {
+    let tools = require_tools!();
+    let (_media, server) = fixtures(&tools);
+    let mut host = Host::start(&tools);
+    let master = format!("{}/multi/master.m3u8", server.origin);
+
+    host.send(download("small", &master, None, "pequeno", json!({ "mode": "maxHeight", "height": 144 })));
+    host.send(download("large", &master, None, "grande", best()));
+    let small = host.wait_for(is_final("small")).pop().unwrap();
+    assert_eq!(small["type"], "done", "{small:#?}");
+    host.wait_for(is_final("large"));
+
+    let folder = host.downloads.path().join("Media Downloader");
+    assert_eq!(video_size(&tools, &folder.join("pequeno.mp4")), "160x120");
+    assert_eq!(video_size(&tools, &folder.join("grande.mp4")), "320x240");
+}
+
+#[test]
+fn rejects_absurd_heights() {
+    let tools = require_tools!();
+    let mut host = Host::start(&tools);
+    host.send(download("tiny", "https://a.example.com/v.m3u8", None, "x", json!({ "mode": "maxHeight", "height": 1 })));
+    assert_eq!(host.wait_for(is_final("tiny")).pop().unwrap()["error"], "invalidRequest");
+}
+
+#[test]
+fn saves_stream_subtitles_as_srt_next_to_the_video() {
+    let tools = require_tools!();
+    let (_media, server) = fixtures(&tools);
+    let mut host = Host::start(&tools);
+
+    let mut request = download("subs", &format!("{}/multi/master.m3u8", server.origin), None, "com legenda", best());
+    request["subtitles"] = json!(true);
+    host.send(request);
+    let done = host.wait_for(is_final("subs")).pop().unwrap();
+    assert_eq!(done["type"], "done", "{done:#?}");
+
+    let srt = host.downloads.path().join("Media Downloader").join("com legenda.pt.srt");
+    let text = std::fs::read_to_string(&srt).unwrap_or_else(|_| panic!("missing {}", srt.display()));
+    assert!(text.contains("00:00:00,000 --> 00:00:02,000"), "{text}");
+    assert!(text.contains("Olá, mundo"), "{text}");
 }
 
 #[test]

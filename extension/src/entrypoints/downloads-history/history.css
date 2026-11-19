@@ -1,0 +1,4 @@
+.history { max-width: 720px; }
+.history__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.history__header .options__title { margin: 0; }
+.history__list { max-height: none; margin-top: 16px; }

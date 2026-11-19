@@ -5,11 +5,23 @@ use std::path::{Path, PathBuf};
 use crate::protocol::ErrorCode;
 
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum Preset {
+#[serde(tag = "mode", rename_all = "camelCase", rename_all_fields = "camelCase", deny_unknown_fields)]
+pub enum Quality {
     Best,
-    Max1080p,
+    MaxHeight { height: u32 },
     AudioMp3,
+}
+
+pub const MIN_HEIGHT: u32 = 144;
+pub const MAX_HEIGHT: u32 = 4320;
+
+impl Quality {
+    pub fn is_valid(self) -> bool {
+        match self {
+            Quality::MaxHeight { height } => (MIN_HEIGHT..=MAX_HEIGHT).contains(&height),
+            _ => true,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -42,7 +54,8 @@ pub struct DownloadSpec<'a> {
     pub output_dir: &'a Path,
     /// Already sanitized and escaped for the output template.
     pub output_stem: &'a str,
-    pub preset: Preset,
+    pub quality: Quality,
+    pub subtitles: bool,
 }
 
 const PROGRESS_MARKER: &str = "MDPROG";
@@ -85,19 +98,30 @@ pub fn build_args(spec: &DownloadSpec, engines: &EnginePaths) -> Vec<OsString> {
         args.push(format!("User-Agent:{user_agent}").into());
     }
 
-    args.extend(preset_args(spec.preset).iter().map(OsString::from));
+    args.extend(quality_args(spec.quality));
+    if spec.subtitles && spec.quality != Quality::AudioMp3 {
+        // Written next to the video as <name>.<lang>.srt, which every player picks up.
+        args.extend(["--write-subs", "--sub-langs", "all,-live_chat", "--convert-subs", "srt"].map(OsString::from));
+    }
     // Everything after "--" is a URL, never an option, even if it starts with "-".
     args.push("--".into());
     args.push(spec.url.into());
     args
 }
 
-fn preset_args(preset: Preset) -> &'static [&'static str] {
-    match preset {
-        Preset::Best => &["-f", "bv*+ba/b", "--merge-output-format", "mp4"],
-        Preset::Max1080p => &["-f", "bv*[height<=1080]+ba/b[height<=1080]/b", "--merge-output-format", "mp4"],
-        Preset::AudioMp3 => &["-f", "ba/b", "-x", "--audio-format", "mp3"],
-    }
+fn quality_args(quality: Quality) -> Vec<OsString> {
+    let args: Vec<String> = match quality {
+        Quality::Best => vec!["-f".into(), "bv*+ba/b".into(), "--merge-output-format".into(), "mp4".into()],
+        Quality::MaxHeight { height } => vec![
+            "-f".into(),
+            // Best at or below the limit; if nothing is that small, the smallest available.
+            format!("bv*[height<={height}]+ba/b[height<={height}]/wv*+ba/w"),
+            "--merge-output-format".into(),
+            "mp4".into(),
+        ],
+        Quality::AudioMp3 => vec!["-f".into(), "ba/b".into(), "-x".into(), "--audio-format".into(), "mp3".into()],
+    };
+    args.into_iter().map(OsString::from).collect()
 }
 
 #[derive(Debug, PartialEq)]
@@ -164,14 +188,15 @@ mod tests {
         EnginePaths { yt_dlp: "yt-dlp".into(), ffmpeg_dir: "bin".into() }
     }
 
-    fn spec(preset: Preset) -> DownloadSpec<'static> {
+    fn spec(quality: Quality) -> DownloadSpec<'static> {
         DownloadSpec {
             url: "https://cdn.example.com/aula/master.m3u8",
             referer: Some("https://example.com/aula"),
             user_agent: Some("Mozilla/5.0"),
             output_dir: Path::new("Downloads/Media Downloader"),
             output_stem: "Aula 1",
-            preset,
+            quality,
+            subtitles: false,
         }
     }
 
@@ -181,20 +206,20 @@ mod tests {
 
     #[test]
     fn url_comes_last_after_the_option_terminator() {
-        let args = as_strings(build_args(&spec(Preset::Best), &engines()));
+        let args = as_strings(build_args(&spec(Quality::Best), &engines()));
         assert_eq!(&args[args.len() - 2..], ["--", "https://cdn.example.com/aula/master.m3u8"]);
     }
 
     #[test]
     fn ignores_user_config_and_never_allows_drm_formats() {
-        let args = as_strings(build_args(&spec(Preset::Best), &engines()));
+        let args = as_strings(build_args(&spec(Quality::Best), &engines()));
         assert_eq!(args[0], "--ignore-config");
         assert!(!args.iter().any(|a| a.contains("allow-unplayable") || a.contains("cookies") || a == "--exec"));
     }
 
     #[test]
     fn passes_output_location_and_headers() {
-        let args = as_strings(build_args(&spec(Preset::Best), &engines()));
+        let args = as_strings(build_args(&spec(Quality::Best), &engines()));
         let joined = args.join(" ");
         assert!(joined.contains("-P Downloads/Media Downloader -o Aula 1.%(ext)s"));
         assert!(joined.contains("--add-headers Referer:https://example.com/aula"));
@@ -204,7 +229,7 @@ mod tests {
 
     #[test]
     fn omits_headers_that_were_not_provided() {
-        let mut no_headers = spec(Preset::Best);
+        let mut no_headers = spec(Quality::Best);
         no_headers.referer = None;
         no_headers.user_agent = None;
         assert!(!as_strings(build_args(&no_headers, &engines())).contains(&"--add-headers".to_owned()));
@@ -212,10 +237,32 @@ mod tests {
 
     #[test]
     fn presets_select_formats() {
-        let audio = as_strings(build_args(&spec(Preset::AudioMp3), &engines())).join(" ");
+        let audio = as_strings(build_args(&spec(Quality::AudioMp3), &engines())).join(" ");
         assert!(audio.contains("-x --audio-format mp3"));
-        let hd = as_strings(build_args(&spec(Preset::Max1080p), &engines())).join(" ");
-        assert!(hd.contains("height<=1080"));
+        let hd = as_strings(build_args(&spec(Quality::MaxHeight { height: 720 }), &engines())).join(" ");
+        assert!(hd.contains("-f bv*[height<=720]+ba/b[height<=720]/wv*+ba/w --merge-output-format mp4"));
+    }
+
+    #[test]
+    fn validates_height_limits() {
+        assert!(Quality::MaxHeight { height: 1080 }.is_valid());
+        assert!(!Quality::MaxHeight { height: 0 }.is_valid());
+        assert!(!Quality::MaxHeight { height: 99_999 }.is_valid());
+        assert!(Quality::Best.is_valid());
+    }
+
+    #[test]
+    fn requests_srt_subtitles_only_when_asked_and_not_for_audio() {
+        let mut with_subs = spec(Quality::Best);
+        with_subs.subtitles = true;
+        let joined = as_strings(build_args(&with_subs, &engines())).join(" ");
+        assert!(joined.contains("--write-subs --sub-langs all,-live_chat --convert-subs srt"));
+
+        assert!(!as_strings(build_args(&spec(Quality::Best), &engines())).contains(&"--write-subs".to_owned()));
+
+        let mut audio = spec(Quality::AudioMp3);
+        audio.subtitles = true;
+        assert!(!as_strings(build_args(&audio, &engines())).contains(&"--write-subs".to_owned()));
     }
 
     #[test]

@@ -37,8 +37,18 @@ async function save() {
       </label>
 
       <label class="checkbox">
+        <input v-model="form.subtitles" type="checkbox" name="subtitles" />
+        <span>{{ t('optionsSubtitlesLabel') }}</span>
+      </label>
+
+      <label class="checkbox">
         <input v-model="form.askWhereToSave" type="checkbox" name="askWhereToSave" />
         <span>{{ t('optionsAskLabel') }}</span>
+      </label>
+
+      <label class="checkbox">
+        <input v-model="form.keepHistory" type="checkbox" name="keepHistory" />
+        <span>{{ t('optionsHistoryLabel') }}</span>
       </label>
 
       <div class="options__actions">

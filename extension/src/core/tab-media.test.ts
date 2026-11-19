@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { mergeMedia, applyInspection, applyDownloadStarted, visibleMedia, type DetectedMedia } from './tab-media';
+import type { ManifestInspection } from './manifest-inspector';
+
+function inspection(overrides: Partial<ManifestInspection>): ManifestInspection {
+  return { protection: 'clear', variantUrls: [], heights: [], live: false, subtitleLanguages: [], ...overrides };
+}
 
 function media(url: string, overrides: Partial<DetectedMedia> = {}): DetectedMedia {
   return {
@@ -44,17 +49,14 @@ describe('mergeMedia', () => {
 describe('applyInspection', () => {
   it('sets protection on the inspected manifest', () => {
     const list = [media('https://c.example.com/master.m3u8')];
-    const result = applyInspection(list, list[0]!.key, { protection: 'protected', variantUrls: [] });
+    const result = applyInspection(list, list[0]!.key, inspection({ protection: 'protected', variantUrls: [] }));
     expect(result[0]?.protection).toBe('protected');
   });
 
   it('hides variants of a master playlist, including ones detected later', () => {
     const master = media('https://c.example.com/master.m3u8');
     const variant = media('https://c.example.com/720p/index.m3u8?sig=1');
-    let list = applyInspection([master, variant], master.key, {
-      protection: 'clear',
-      variantUrls: ['https://c.example.com/720p/index.m3u8?sig=1', 'https://c.example.com/360p/index.m3u8'],
-    });
+    let list = applyInspection([master, variant], master.key, inspection({ protection: 'clear', variantUrls: ['https://c.example.com/720p/index.m3u8?sig=1', 'https://c.example.com/360p/index.m3u8'] }));
     list = mergeMedia(list, media('https://c.example.com/360p/index.m3u8?sig=2'));
 
     expect(visibleMedia(list).map(m => m.url)).toEqual(['https://c.example.com/master.m3u8']);
@@ -63,16 +65,21 @@ describe('applyInspection', () => {
   it('propagates the master protection status to its variants', () => {
     const master = media('https://c.example.com/master.m3u8');
     const variant = media('https://c.example.com/720p/index.m3u8');
-    const list = applyInspection([master, variant], master.key, {
-      protection: 'protected',
-      variantUrls: ['https://c.example.com/720p/index.m3u8'],
-    });
+    const list = applyInspection([master, variant], master.key, inspection({ protection: 'protected', variantUrls: ['https://c.example.com/720p/index.m3u8'] }));
     expect(list.find(m => m.key === variant.key)?.protection).toBe('protected');
   });
 
   it('ignores inspections for media that is no longer listed', () => {
     const list = [media('https://c.example.com/a.mp4')];
-    expect(applyInspection(list, 'https://gone.example.com/x.m3u8', { protection: 'clear', variantUrls: [] })).toEqual(list);
+    expect(applyInspection(list, 'https://gone.example.com/x.m3u8', inspection({ protection: 'clear', variantUrls: [] }))).toEqual(list);
+  });
+});
+
+describe('applyInspection details', () => {
+  it('stores heights, liveness and subtitle languages on the inspected stream', () => {
+    const list = [media('https://c.example.com/master.m3u8')];
+    const [result] = applyInspection(list, list[0]!.key, inspection({ heights: [1080, 720], live: true, subtitleLanguages: ['pt-BR'] }));
+    expect(result).toMatchObject({ heights: [1080, 720], live: true, subtitleLanguages: ['pt-BR'] });
   });
 });
 

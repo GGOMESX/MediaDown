@@ -8,7 +8,7 @@ describe('normalizeSettings', () => {
   });
 
   it('sanitizes the folder and rejects wrong types', () => {
-    expect(normalizeSettings({ folder: '../Cursos', askWhereToSave: 'yes', preset: '8k' })).toEqual({ folder: 'Cursos', askWhereToSave: false, preset: 'best' });
+    expect(normalizeSettings({ folder: '../Cursos', askWhereToSave: 'yes', preset: '8k' })).toEqual({ folder: 'Cursos', askWhereToSave: false, preset: 'best', subtitles: true, keepHistory: true });
   });
 
   it('ignores garbage input', () => {
@@ -25,7 +25,7 @@ describe('settings persistence', () => {
   });
 
   it('round-trips saved settings in normalized form', async () => {
-    await saveSettings({ folder: 'Vídeos//Aulas', askWhereToSave: true, preset: 'audioMp3' });
-    expect(await loadSettings()).toEqual({ folder: 'Vídeos/Aulas', askWhereToSave: true, preset: 'audioMp3' });
+    await saveSettings({ folder: 'Vídeos//Aulas', askWhereToSave: true, preset: 'audioMp3', subtitles: false, keepHistory: true });
+    expect(await loadSettings()).toEqual({ folder: 'Vídeos/Aulas', askWhereToSave: true, preset: 'audioMp3', subtitles: false, keepHistory: true });
   });
 });
