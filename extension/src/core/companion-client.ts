@@ -52,7 +52,13 @@ class CompanionConnection implements CompanionGateway {
           resolve(status);
         }
       };
-      const timeout = setTimeout(() => settle({ state: 'incompatible' }), HELLO_TIMEOUT_MS);
+      const timeout = setTimeout(() => {
+        // A host that never answers must not stay cached as the connection: retry next time.
+        this.port?.disconnect();
+        this.port = null;
+        this.hello = null;
+        settle({ state: 'incompatible' });
+      }, HELLO_TIMEOUT_MS);
 
       let port: Browser.runtime.Port;
       try {
