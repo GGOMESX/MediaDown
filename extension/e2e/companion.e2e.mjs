@@ -58,7 +58,11 @@ before(async () => {
 
   videoPage = await context.newPage();
   await videoPage.goto(`${origin}/stream.html`);
-  await waitFor(async () => (await mediaOf(await tabIdOf(origin))).some(m => m.kind === 'hls' && m.protection === 'clear'));
+  await waitFor(
+    async () => (await mediaOf(await tabIdOf(origin))).some(m => m.url.includes('/hls/') && m.protection === 'clear'),
+    15_000,
+    async () => JSON.stringify(await mediaOf(await tabIdOf(origin))),
+  );
 });
 
 after(async () => {
@@ -217,11 +221,11 @@ async function waitForJob(tabId, mediaKey, state) {
   return job;
 }
 
-async function waitFor(condition, timeoutMs = 15_000) {
+async function waitFor(condition, timeoutMs = 15_000, describe = async () => '') {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await condition()) return;
     await new Promise(resolve => setTimeout(resolve, 150));
   }
-  throw new Error('Timed out waiting for condition');
+  throw new Error(`Timed out waiting for condition ${await describe()}`);
 }
