@@ -14,6 +14,10 @@ const { status: companionStatus } = useCompanionStatus();
 const companionReady = computed(() => companionStatus.value?.state === 'ready');
 const defaultPreset = ref<Preset>(DEFAULT_SETTINGS.preset);
 const historyUrl = browser.runtime.getURL('/downloads-history.html');
+const extensionVersion = browser.runtime.getManifest().version;
+const hostVersion = computed(() => companionStatus.value?.hostVersion);
+// Same protocol can still mean different builds; one release ships both halves.
+const versionsDiffer = computed(() => !!hostVersion.value && hostVersion.value !== extensionVersion);
 onMounted(async () => {
   defaultPreset.value = (await loadSettings()).preset;
 });
@@ -48,9 +52,15 @@ onMounted(async () => {
       />
     </ul>
 
-    <footer v-if="companionStatus" class="popup__footer" :class="{ 'popup__footer--ok': companionReady }">
-      <template v-if="companionReady">{{ t('companionStatusReady', companionStatus.engineVersion ?? '?') }}</template>
-      <template v-else>{{ t('companionStatusMissing') }}</template>
+    <footer v-if="companionStatus" class="popup__footer">
+      <p class="popup__status" :class="{ 'popup__status--ok': companionReady }">
+        <template v-if="companionReady">{{ t('companionStatusReady', companionStatus.engineVersion ?? '?') }}</template>
+        <template v-else>{{ t('companionStatusMissing') }}</template>
+      </p>
+      <p class="popup__versions">
+        {{ hostVersion ? t('versionsLine', [extensionVersion, hostVersion]) : t('versionsLineNoApp', extensionVersion) }}
+      </p>
+      <p v-if="versionsDiffer" class="item__note" role="alert">{{ t('versionMismatch') }}</p>
     </footer>
   </main>
 </template>

@@ -2,11 +2,11 @@
 import { computed, ref } from 'vue';
 import { browser } from 'wxt/browser';
 import type { DetectedMedia } from '@/core/media-classifier';
-import type { DownloadRequest, DownloadResponse } from '@/core/messages';
+import type { DownloadRequest, DownloadResponse, RecordRequest } from '@/core/messages';
 import { displayName, formatBytes, formatDuration } from '@/core/format';
 import { toTransferView, primaryAction, type BrowserDownloadStatus, type PrimaryAction } from '@/core/transfer-view';
 import { t, TRANSFER_ERROR_MESSAGE, REFUSAL_MESSAGE, type MessageKey } from '@/core/i18n';
-import { qualityOptions, defaultOption, type QualityOption } from '@/core/quality';
+import { qualityOptions, liveQualityOptions, defaultOption, type QualityOption } from '@/core/quality';
 import type { Preset } from '@/core/settings';
 
 const props = defineProps<{
@@ -46,10 +46,16 @@ const host = computed(() => new URL(props.media.url).host);
 const isProtected = computed(() => props.media.protection === 'protected');
 const isStream = computed(() => props.media.kind === 'hls' || props.media.kind === 'dash');
 const heights = computed(() => props.media.heights ?? []);
-const options = computed(() => qualityOptions(heights.value));
+const options = computed(() => (props.media.live ? liveQualityOptions(heights.value) : qualityOptions(heights.value)));
 const selectedQuality = ref(defaultOption(heights.value, props.defaultPreset).value);
+// Audio-only is not offered for lives; fall back to the first option if that was the default.
+const effectiveQuality = computed(() => (options.value.some(o => o.value === selectedQuality.value) ? selectedQuality.value : options.value[0]!.value));
 const showQualityPicker = computed(
-  () => isStream.value && props.companionReady && !props.media.live && props.media.protection === 'clear' && action.value === 'download',
+  () =>
+    isStream.value &&
+    props.companionReady &&
+    props.media.protection === 'clear' &&
+    (props.media.live ? action.value === 'record' && heights.value.length > 1 : action.value === 'download'),
 );
 
 function optionLabel(option: QualityOption): string {
@@ -109,7 +115,7 @@ async function runAction() {
         await requestDownload('companion');
         break;
       case 'record':
-        await sendAndExplain({ type: 'record', tabId: props.tabId, mediaKey: props.media.key });
+        await sendAndExplain({ type: 'record', tabId: props.tabId, mediaKey: props.media.key, ...withQuality(chosenQuality()) });
         break;
       case 'stopRecording':
         await browser.runtime.sendMessage({ type: 'stop', tabId: props.tabId, mediaKey: props.media.key });
@@ -123,13 +129,21 @@ async function runAction() {
   }
 }
 
+function chosenQuality() {
+  return isStream.value ? options.value.find(o => o.value === effectiveQuality.value)?.choice : undefined;
+}
+
 async function requestDownload(via?: 'companion') {
-  const quality = isStream.value ? options.value.find(o => o.value === selectedQuality.value)?.choice : undefined;
+  const quality = chosenQuality();
   const request: DownloadRequest = { type: 'download', tabId: props.tabId, mediaKey: props.media.key, ...(via && { via }), ...(quality && { quality }) };
   await sendAndExplain(request);
 }
 
-async function sendAndExplain(request: DownloadRequest | { type: 'record'; tabId: number; mediaKey: string }) {
+function withQuality(choice: QualityOption['choice'] | undefined) {
+  return choice && choice.mode !== 'audioMp3' ? { quality: choice } : {};
+}
+
+async function sendAndExplain(request: DownloadRequest | RecordRequest) {
   const response = (await browser.runtime.sendMessage(request)) as DownloadResponse | undefined;
   if (!response?.ok) refusal.value = REFUSAL_MESSAGE[response?.reason ?? 'failed'];
 }
@@ -156,7 +170,13 @@ async function copyUrl() {
       </div>
 
       <div v-if="!isProtected" class="item__actions">
-        <select v-if="showQualityPicker" v-model="selectedQuality" class="select" :aria-label="t('qualityLabel')">
+        <select
+          v-if="showQualityPicker"
+          :value="effectiveQuality"
+          class="select"
+          :aria-label="t('qualityLabel')"
+          @change="selectedQuality = ($event.target as HTMLSelectElement).value"
+        >
           <option v-for="option in options" :key="option.value" :value="option.value">{{ optionLabel(option) }}</option>
         </select>
         <button

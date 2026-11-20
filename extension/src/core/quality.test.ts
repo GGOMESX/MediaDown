@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { qualityOptions, defaultOption, presetToChoice, parseQualityChoice } from './quality';
+import { qualityOptions, liveQualityOptions, variantForChoice, defaultOption, presetToChoice, parseQualityChoice } from './quality';
 
 describe('qualityOptions', () => {
   it('offers best, the lower heights and audio', () => {
@@ -44,5 +44,23 @@ describe('presetToChoice / parseQualityChoice', () => {
     expect(parseQualityChoice({ mode: 'maxHeight', height: 1 })).toBeNull();
     expect(parseQualityChoice({ mode: 'maxHeight', height: '720' })).toBeNull();
     expect(parseQualityChoice({ mode: 'exec' })).toBeNull();
+  });
+});
+
+describe('live recording quality', () => {
+  it('offers no audio-only option', () => {
+    expect(liveQualityOptions([1080, 720]).map(o => o.value)).toEqual(['best', 'h720']);
+  });
+
+  it('picks the tallest variant within the limit, by playlist index', () => {
+    const variants = [360, 1080, 720, null];
+    expect(variantForChoice(variants, { mode: 'maxHeight', height: 720 })).toBe(2);
+    expect(variantForChoice(variants, { mode: 'maxHeight', height: 900 })).toBe(2);
+    expect(variantForChoice(variants, { mode: 'maxHeight', height: 144 })).toBe(0);
+  });
+
+  it('lets ffmpeg choose for "best" or when heights are unknown', () => {
+    expect(variantForChoice([360, 1080], { mode: 'best' })).toBeUndefined();
+    expect(variantForChoice([null, null], { mode: 'maxHeight', height: 720 })).toBeUndefined();
   });
 });

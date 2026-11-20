@@ -6,7 +6,8 @@ use std::thread;
 use mediadown_host::engine::EnginePaths;
 use mediadown_host::jobs::{Config, JobManager, ManagerMsg};
 use mediadown_host::protocol::{self, Event};
-use mediadown_host::recorder::Limits;
+use mediadown_host::recorder::{self, Limits};
+use mediadown_host::recovery;
 
 const MAX_CONCURRENT_DOWNLOADS: usize = 2;
 
@@ -43,11 +44,19 @@ fn main() {
         }
     });
 
+    let engines = EnginePaths::discover();
+    let state_dir = recovery::state_dir();
+
+    // A previous host may have died mid-recording: finish those files in the background.
+    let (recovery_dir, ffmpeg) = (state_dir.clone(), recorder::ffmpeg_binary(&engines.ffmpeg_dir));
+    thread::spawn(move || recovery::recover_orphans(&recovery_dir, &ffmpeg));
+
     let config = Config {
         downloads_dir: downloads_dir(),
-        engines: EnginePaths::discover(),
+        engines,
         max_concurrent: MAX_CONCURRENT_DOWNLOADS,
         recording_limits: Limits::from_env(),
+        state_dir,
     };
     JobManager::new(config, event_tx, manager_tx).run(manager_rx);
     let _ = writer.join();

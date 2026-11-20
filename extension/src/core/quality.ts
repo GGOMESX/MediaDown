@@ -20,6 +20,23 @@ export function encodeChoice(choice: QualityChoice): string {
   return choice.mode === 'maxHeight' ? `h${choice.height}` : choice.mode;
 }
 
+/** Options for a live recording: no audio-only (ffmpeg records a variant as it is). */
+export function liveQualityOptions(heights: readonly number[]): QualityOption[] {
+  return qualityOptions(heights).filter(option => option.choice.mode !== 'audioMp3');
+}
+
+/**
+ * The variant to record for a choice: the tallest one within the limit (else the shortest).
+ * undefined = let ffmpeg pick the best.
+ */
+export function variantForChoice(variantHeights: readonly (number | null)[], choice: QualityChoice): number | undefined {
+  if (choice.mode !== 'maxHeight') return undefined;
+  const known = variantHeights.map((height, index) => ({ height, index })).filter((v): v is { height: number; index: number } => v.height !== null);
+  if (known.length === 0) return undefined;
+  const fitting = known.filter(v => v.height <= choice.height).sort((a, b) => b.height - a.height);
+  return (fitting[0] ?? [...known].sort((a, b) => a.height - b.height)[0])!.index;
+}
+
 /** Options for a stream's quality picker: best, each offered height below the top one, audio only. */
 export function qualityOptions(heights: readonly number[]): QualityOption[] {
   const below = [...heights].sort((a, b) => b - a).slice(1).filter(h => h >= MIN_HEIGHT && h <= MAX_HEIGHT);

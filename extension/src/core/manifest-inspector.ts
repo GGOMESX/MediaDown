@@ -6,6 +6,8 @@ export interface ManifestInspection {
   variantUrls: string[];
   /** Distinct video heights offered (e.g. [1080, 720, 360]), highest first. */
   heights: number[];
+  /** Height of each HLS variant in playlist order (null when not declared); ffmpeg numbers variants this way. */
+  variantHeights: (number | null)[];
   /** null for an HLS master playlist: only its variant playlists say whether the stream is live. */
   live: boolean | null;
   subtitleLanguages: string[];
@@ -38,7 +40,7 @@ export function combineWithVariant(master: ManifestInspection, variant: Manifest
 function inspectHls(body: string, manifestUrl: string): ManifestInspection {
   const lines = body.split(/\r?\n/).map(line => line.trim());
   const variantUrls: string[] = [];
-  const heights: number[] = [];
+  const variantHeights: (number | null)[] = [];
   const subtitleLanguages: string[] = [];
   const renditionUrls: string[] = [];
 
@@ -48,7 +50,7 @@ function inspectHls(body: string, manifestUrl: string): ManifestInspection {
       const resolved = uri && resolveUrl(uri, manifestUrl);
       if (resolved) variantUrls.push(resolved);
       const height = Number(attribute(line, 'RESOLUTION')?.split('x')[1]);
-      if (height > 0) heights.push(height);
+      variantHeights.push(height > 0 ? height : null);
     } else if (line.startsWith('#EXT-X-MEDIA')) {
       const uri = attribute(line, 'URI');
       const resolved = uri && resolveUrl(uri, manifestUrl);
@@ -61,7 +63,8 @@ function inspectHls(body: string, manifestUrl: string): ManifestInspection {
   return {
     protection: HLS_ENCRYPTION.test(body) ? 'protected' : 'clear',
     variantUrls: isMaster ? [...variantUrls, ...renditionUrls] : [],
-    heights: distinctDescending(heights),
+    heights: distinctDescending(variantHeights.filter((h): h is number => h !== null)),
+    variantHeights,
     live: isMaster ? null : !HLS_ENDED.test(body),
     subtitleLanguages: distinct(subtitleLanguages),
   };
@@ -76,6 +79,7 @@ function inspectDash(body: string): ManifestInspection {
     protection: DASH_ENCRYPTION.test(body) ? 'protected' : 'clear',
     variantUrls: [],
     heights: distinctDescending(heights),
+    variantHeights: [],
     live: /<(?:\w+:)?MPD\b[^>]*\stype="dynamic"/i.test(body),
     subtitleLanguages: distinct(textSets.map(tag => tag.match(/\slang="([^"]+)"/i)?.[1] ?? '?')),
   };

@@ -6,4 +6,5 @@ pub mod jobs;
 pub mod platform;
 pub mod protocol;
 pub mod recorder;
+pub mod recovery;
 pub mod validation;

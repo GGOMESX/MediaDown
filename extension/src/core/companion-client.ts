@@ -6,7 +6,7 @@ import type { QualityChoice } from './quality';
 import { completePending, dropPending, pendingIdForJob } from './history';
 
 export const NATIVE_HOST_NAME = 'com.mediadown.host';
-const PROTOCOL_VERSION = 3;
+const PROTOCOL_VERSION = 4;
 // The first yt-dlp start on Windows unpacks itself and can take a few seconds.
 const HELLO_TIMEOUT_MS = 20_000;
 const IDLE_DISCONNECT_MS = 15_000;
@@ -24,7 +24,7 @@ export type HostRequest =
       quality: QualityChoice;
       subtitles: boolean;
     }
-  | { type: 'record'; jobId: string; url: string; referer?: string; userAgent?: string; folder: string; fileName: string }
+  | { type: 'record'; jobId: string; url: string; referer?: string; userAgent?: string; folder: string; fileName: string; variant?: number }
   | { type: 'stop' | 'cancel' | 'reveal'; jobId: string };
 
 /** What download-service needs from the companion; tests swap in a fake. */

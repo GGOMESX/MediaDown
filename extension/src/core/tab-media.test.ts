@@ -3,7 +3,7 @@ import { mergeMedia, applyInspection, applyDownloadStarted, visibleMedia, type D
 import type { ManifestInspection } from './manifest-inspector';
 
 function inspection(overrides: Partial<ManifestInspection>): ManifestInspection {
-  return { protection: 'clear', variantUrls: [], heights: [], live: false, subtitleLanguages: [], ...overrides };
+  return { protection: 'clear', variantUrls: [], heights: [], variantHeights: [], live: false, subtitleLanguages: [], ...overrides };
 }
 
 function media(url: string, overrides: Partial<DetectedMedia> = {}): DetectedMedia {

@@ -35,6 +35,7 @@ export function applyInspection(list: readonly DetectedMedia[], key: string, ins
         protection: inspection.protection,
         variantKeys,
         heights: inspection.heights,
+        variantHeights: inspection.variantHeights,
         live: inspection.live ?? undefined,
         subtitleLanguages: inspection.subtitleLanguages,
       };

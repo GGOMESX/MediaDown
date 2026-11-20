@@ -1,0 +1,97 @@
+name: Release
+
+# Push a tag like v1.0.0 to publish a GitHub Release with both packages.
+# Unlike CI artifacts (deleted after 90 days), release files stay available.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag must match the project version
+        run: python3 .github/scripts/versions.py check "${GITHUB_REF_NAME}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - name: Test and build
+        working-directory: extension
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Package
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          (cd extension/.output && zip -qr "$GITHUB_WORKSPACE/MediaDown-extension-chrome-$version.zip" chrome-mv3)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-extension
+          path: MediaDown-extension-chrome-*.zip
+
+  companion:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: companion
+      - name: Test and build
+        working-directory: companion
+        run: |
+          cargo test
+          cargo build --release
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $dist = "MediaDown-companion"
+          New-Item -ItemType Directory -Force $dist | Out-Null
+          Copy-Item companion/target/release/mediadown-host.exe $dist
+          Copy-Item companion/installer/* $dist
+          Compress-Archive -Path $dist -DestinationPath "MediaDown-companion-windows-$version.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-companion
+          path: MediaDown-companion-windows-*.zip
+
+  publish:
+    needs: [extension, companion]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+      - name: Publish the release
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          sha256sum MediaDown-*.zip > SHA256SUMS.txt
+          cat > notes.md <<NOTES
+          ## Instalação (Windows)
+
+          1. Baixe \`MediaDown-extension-chrome-$version.zip\` e \`MediaDown-companion-windows-$version.zip\`.
+          2. **Extensão:** extraia; em \`chrome://extensions\` ative o *Modo do desenvolvedor* → *Carregar sem compactação* → pasta \`chrome-mv3\`.
+             Ao atualizar, substitua a pasta e clique em ↻.
+          3. **App:** extraia e dê dois cliques em \`install.cmd\`.
+          4. Instale **os dois do mesmo release**: o popup avisa quando as versões diferem.
+
+          Confira os arquivos com \`SHA256SUMS.txt\` (no PowerShell: \`Get-FileHash <arquivo>\`).
+
+          NOTES
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --title "MediaDown $version" --notes-file notes.md --generate-notes \
+            MediaDown-*.zip SHA256SUMS.txt

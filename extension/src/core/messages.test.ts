@@ -12,6 +12,12 @@ describe('parseRequest', () => {
       .toEqual({ type: 'download', tabId: 3, mediaKey: 'k', quality: { mode: 'maxHeight', height: 720 } });
   });
 
+  it('accepts a recording resolution but not audio-only', () => {
+    expect(parseRequest({ type: 'record', tabId: 2, mediaKey: 'k', quality: { mode: 'maxHeight', height: 720 } }))
+      .toEqual({ type: 'record', tabId: 2, mediaKey: 'k', quality: { mode: 'maxHeight', height: 720 } });
+    expect(parseRequest({ type: 'record', tabId: 2, mediaKey: 'k', quality: { mode: 'audioMp3' } })).toBeNull();
+  });
+
   it('accepts record and stop requests', () => {
     expect(parseRequest({ type: 'record', tabId: 2, mediaKey: 'k' })).toEqual({ type: 'record', tabId: 2, mediaKey: 'k' });
     expect(parseRequest({ type: 'stop', tabId: 2, mediaKey: 'k', extra: true })).toEqual({ type: 'stop', tabId: 2, mediaKey: 'k' });

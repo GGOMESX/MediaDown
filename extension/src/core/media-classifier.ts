@@ -22,6 +22,8 @@ export interface DetectedMedia {
   variantKeys?: string[];
   /** Video heights offered by an HLS/DASH stream, highest first. */
   heights?: number[];
+  /** Height per HLS variant, in playlist order; used to pick the variant to record. */
+  variantHeights?: (number | null)[];
   /** A live stream has no end; recording it is not supported yet. */
   live?: boolean;
   subtitleLanguages?: string[];

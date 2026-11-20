@@ -74,6 +74,9 @@ after(async () => {
 test('popup reports the connected companion and its yt-dlp version', { skip }, async () => {
   const popup = await openPopupWith(await tabIdOf(origin));
   await popup.getByText(/App MediaDown conectado · yt-dlp 20\d\d\./).waitFor();
+  const version = JSON.parse(await readFile(path.join(HERE, '../package.json'), 'utf8')).version;
+  await popup.getByText(`Extensão ${version} · App ${version}`).waitFor();
+  assert.equal(await popup.getByText('versões diferentes', { exact: false }).count(), 0);
   await popup.close();
 });
 
@@ -153,6 +156,27 @@ test('records a live stream from the popup and saves it as MP4', { skip }, async
   await popup.close();
 });
 
+test('records a live stream at the resolution chosen in the popup', { skip }, async () => {
+  const tabId = await tabIdOf(origin);
+  await waitFor(async () => (await mediaOf(tabId)).find(m => m.url.includes('/livemaster/'))?.live === true, 20_000);
+  const popup = await openPopupWith(tabId);
+  const item = popup.locator('.item').filter({ has: popup.locator('.item__name', { hasText: 'livemaster/master.m3u8' }) });
+  const picker = item.getByRole('combobox', { name: 'Qualidade' });
+  await picker.waitFor();
+  assert.deepEqual(await picker.locator('option').allTextContents(), ['Melhor (240p)', 'Até 144p']);
+
+  await picker.selectOption({ label: 'Até 144p' });
+  await item.getByRole('button', { name: 'Gravar' }).click();
+  await item.getByText(/Gravando · 00:0[2-9]/).waitFor({ timeout: 30_000 });
+  await item.getByRole('button', { name: 'Parar e salvar' }).click();
+  await item.getByText('Concluído').waitFor({ timeout: 30_000 });
+
+  const popupTabId = await popup.evaluate(async () => (await chrome.tabs.getCurrent()).id);
+  const job = (await mediaOf(popupTabId)).find(m => m.url.includes('/livemaster/')).job;
+  assert.equal(videoSize(path.join(dirs.downloads, 'Media Downloader', job.fileName)), '256x144');
+  await popup.close();
+});
+
 // ---------- helpers ----------
 
 function mediaSeconds(file) {
@@ -186,6 +210,12 @@ function generateMedia(dir) {
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-force_key_frames', 'expr:gte(t,n_forced*1)', '-c:a', 'aac',
     '-f', 'hls', '-hls_time', '1', '-hls_playlist_type', 'vod', '-hls_segment_filename', 'live-src/seg%d.ts', 'live-src/vod.m3u8',
   ]);
+  execFileSync('mkdir', ['-p', path.join(dir, 'live-src-144')]);
+  run([
+    '-f', 'lavfi', '-i', 'testsrc=duration=30:size=320x240:rate=25', '-f', 'lavfi', '-i', 'sine=duration=30', '-vf', 'scale=256:144',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-force_key_frames', 'expr:gte(t,n_forced*1)', '-c:a', 'aac',
+    '-f', 'hls', '-hls_time', '1', '-hls_playlist_type', 'vod', '-hls_segment_filename', 'live-src-144/seg%d.ts', 'live-src-144/vod.m3u8',
+  ]);
   execFileSync('sh', ['-c', `printf '%s' "$0" > multi/master.m3u8`, [
     '#EXTM3U',
     '#EXT-X-STREAM-INF:BANDWIDTH=600000,RESOLUTION=320x240', '240/index.m3u8',
@@ -207,7 +237,10 @@ function videoSize(file) {
 async function serve(root) {
   const page = `<!doctype html><title>Aula 7 — Introdução ao Rust</title>
     <video src="/hotlink/real.mp4" preload="auto" muted></video>
-    <script>fetch('/hls/index.m3u8'); fetch('/multi/master.m3u8'); fetch('/live/index.m3u8')</script>`;
+    <script>fetch('/hls/index.m3u8'); fetch('/multi/master.m3u8'); fetch('/live/index.m3u8'); fetch('/livemaster/master.m3u8')</script>`;
+  const liveMaster = '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=600000,RESOLUTION=320x240\n240/index.m3u8\n' +
+    '#EXT-X-STREAM-INF:BANDWIDTH=200000,RESOLUTION=256x144\n144/index.m3u8\n';
+  const liveSources = { '/live/': 'live-src', '/livemaster/240/': 'live-src', '/livemaster/144/': 'live-src-144' };
   const started = Date.now();
   // A live playlist as published `elapsed` seconds in: a 3-segment window advancing every second, no ENDLIST.
   const livePlaylist = () => {
@@ -221,11 +254,15 @@ async function serve(root) {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
     if (url.pathname === '/stream.html') return res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(page);
-    if (url.pathname === '/live/index.m3u8') {
+    if (url.pathname === '/livemaster/master.m3u8') {
+      return res.writeHead(200, { 'content-type': 'application/vnd.apple.mpegurl' }).end(liveMaster);
+    }
+    const liveDir = Object.keys(liveSources).find(prefix => url.pathname.startsWith(prefix) && url.pathname.slice(prefix.length).match(/^(index\.m3u8|seg\d+\.ts)$/));
+    if (liveDir && url.pathname.endsWith('index.m3u8')) {
       return res.writeHead(200, { 'content-type': 'application/vnd.apple.mpegurl', 'cache-control': 'no-cache' }).end(livePlaylist());
     }
-    if (url.pathname.startsWith('/live/seg')) {
-      const body = await readFile(path.join(root, 'live-src', path.basename(url.pathname))).catch(() => null);
+    if (liveDir) {
+      const body = await readFile(path.join(root, liveSources[liveDir], path.basename(url.pathname))).catch(() => null);
       return body ? res.writeHead(200, { 'content-type': 'video/mp2t', 'content-length': body.length }).end(body) : res.writeHead(404).end();
     }
     const hotlink = url.pathname.startsWith('/hotlink/');

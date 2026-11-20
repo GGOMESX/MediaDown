@@ -8,14 +8,26 @@ Extensão de navegador + app companion para Windows para detectar e baixar víde
 | `extension/` | Extensão MV3 (WXT + TypeScript + Vue) | Sprints 1–5 ✅ |
 | `companion/` | Host nativo em Rust (Windows) que executa yt-dlp/ffmpeg | Sprints 3–5 ✅ ([detalhes](companion/README.md)) |
 
-## Instalação rápida (Windows)
+## Instalação (Windows)
 
-1. Em **Actions → CI**, abra a execução mais recente com sucesso e baixe os artefatos
-   `extension-chrome` e `MediaDown-companion-windows`.
-2. **Extensão:** `chrome://extensions` → *Modo do desenvolvedor* → *Carregar sem
-   compactação* → pasta `extension-chrome`.
-3. **App:** extraia `MediaDown-companion-windows` e dê dois cliques em `install.cmd`.
-4. Recarregue a extensão. O rodapé do popup deve mostrar "App MediaDown conectado".
+1. Abra **[Releases](../../releases/latest)** e baixe `MediaDown-extension-chrome-<versão>.zip` e
+   `MediaDown-companion-windows-<versão>.zip`. Os SHA-256 estão em `SHA256SUMS.txt`.
+2. **Extensão:** extraia e, em `chrome://extensions`, ative o *Modo do desenvolvedor*,
+   clique em *Carregar sem compactação* e escolha a pasta `chrome-mv3`. Para atualizar,
+   substitua a pasta e clique em ↻.
+3. **App:** extraia e dê dois cliques em `install.cmd`.
+4. O rodapé do popup mostra "App MediaDown conectado" e as versões (`Extensão 1.0.0 · App 1.0.0`).
+   Instale sempre os dois **do mesmo release**: o popup avisa se as versões forem diferentes.
+
+## Publicar uma versão
+
+```bash
+python .github/scripts/versions.py set 1.1.0   # atualiza package.json, Cargo.toml e Cargo.lock
+```
+
+Depois do commit na `main`, crie e envie a tag `v1.1.0`. O workflow **Release** testa,
+gera os dois pacotes e publica a página do release. O CI falha se as versões divergirem,
+e o Release recusa uma tag que não bata com a versão do projeto.
 
 ## Extensão: desenvolvimento
 
@@ -108,7 +120,10 @@ npm run build     # gera .output/chrome-mv3
 - **Nada se perde:**
   - a gravação é feita em MPEG-TS e convertida para MP4 ao final;
   - se o navegador fechar no meio, o app tenta parar e converter;
-  - se não conseguir, o `.ts` continua tocável (VLC, Filmes e TV).
+  - se o processo morrer de vez (navegador forçado a fechar, queda de energia), o app
+    termina a conversão **na próxima vez que iniciar** (Sprint 6).
+- **Resolução da gravação** (Sprint 6): em lives com várias resoluções, o popup mostra o
+  seletor ("Melhor (1080p)", "Até 720p"…) ao lado de **Gravar**.
 - **Segurança:**
   - o ffmpeg só aceita `http`/`https`, então uma playlist maliciosa não consegue ler
     arquivos do seu computador (`file://`), e isso tem teste;

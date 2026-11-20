@@ -6,7 +6,8 @@ use crate::recorder::StopReason;
 
 /// v2: `quality` (best / maxHeight / audioMp3) replaces `preset`; adds `subtitles`.
 /// v3: live recording (`record` / `stop`), `elapsedSeconds` in progress, `stopReason` in done.
-pub const PROTOCOL_VERSION: u32 = 3;
+/// v4: `variant` in `record` (resolution of a live recording).
+pub const PROTOCOL_VERSION: u32 = 4;
 /// Chrome refuses host-to-browser messages above 1 MB.
 const MAX_OUTGOING_BYTES: usize = 1024 * 1024;
 /// Our requests are tiny; anything bigger is a bug or an attack.
@@ -33,6 +34,9 @@ pub enum Request {
         user_agent: Option<String>,
         folder: String,
         file_name: String,
+        /// Index of the HLS variant to record (in master playlist order); absent = best.
+        #[serde(default)]
+        variant: Option<u32>,
     },
     /// Ends a recording cleanly and keeps what was recorded.
     Stop { job_id: String },

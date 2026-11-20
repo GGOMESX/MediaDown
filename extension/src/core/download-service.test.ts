@@ -282,8 +282,16 @@ describe('startRecording', () => {
       userAgent: navigator.userAgent,
       folder: 'Media Downloader',
       fileName: 'Canal Ao Vivo — gravação 2026-11-20 21h30',
+      variant: undefined,
     }]);
     expect((await readTabMedia(TAB))[0]?.job).toMatchObject({ state: 'queued', recording: true });
+  });
+
+  it('records the variant matching the chosen resolution', async () => {
+    await seed({ ...LIVE, variantHeights: [240, 1080, 720] });
+    const { gateway, sent } = fakeCompanion();
+    await startRecording({ type: 'record', tabId: TAB, mediaKey: LIVE.key, quality: { mode: 'maxHeight', height: 720 } }, gateway);
+    expect(sent[0]).toMatchObject({ type: 'record', variant: 2 });
   });
 
   it.each([

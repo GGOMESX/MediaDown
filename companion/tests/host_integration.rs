@@ -67,6 +67,14 @@ fn generate_media(tools: &Tools, dir: &Path) {
     ]
     .concat());
 
+    std::fs::create_dir_all(dir.join("live-src-144")).unwrap();
+    run(&[
+        &live_source[..],
+        &["-vf", "scale=256:144", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-force_key_frames", "expr:gte(t,n_forced*1)", "-c:a", "aac"],
+        &["-f", "hls", "-hls_time", "1", "-hls_playlist_type", "vod", "-hls_segment_filename", "live-src-144/seg%d.ts", "live-src-144/vod.m3u8"],
+    ]
+    .concat());
+
     std::fs::create_dir_all(dir.join("multi/subs")).unwrap();
     std::fs::write(dir.join("multi/subs/pt.vtt"), "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nOlá, mundo\n").unwrap();
     std::fs::write(dir.join("multi/subs/pt.m3u8"), "#EXTM3U\n#EXT-X-TARGETDURATION:3\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:3.0,\npt.vtt\n#EXT-X-ENDLIST\n").unwrap();
@@ -150,17 +158,23 @@ fn serve(mut stream: TcpStream, root: &Path, started: Instant) -> std::io::Resul
     }
 
     // Live routes: /live (30 s, keeps going), /shortlive (4 s, then ends), /evil-live (points at a local file).
-    let live_total = match path.split('/').nth(1) {
-        Some("live") => Some(LIVE_SEGMENTS),
-        Some("shortlive") => Some(4),
+    // /livemaster: a live master with a 240p and a 144p variant, each a sliding live playlist.
+    if path == "/livemaster/master.m3u8" {
+        let master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=600000,RESOLUTION=320x240\n../live/index.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=200000,RESOLUTION=256x144\n../live144/index.m3u8\n";
+        return respond(&mut stream, "application/vnd.apple.mpegurl", master.as_bytes());
+    }
+    let live_route = match path.split('/').nth(1) {
+        Some("live") => Some((LIVE_SEGMENTS, "live-src")),
+        Some("live144") => Some((LIVE_SEGMENTS, "live-src-144")),
+        Some("shortlive") => Some((4, "live-src")),
         _ => None,
     };
-    if let Some(total) = live_total {
+    if let Some((total, source_dir)) = live_route {
         if path.ends_with("index.m3u8") {
             return respond(&mut stream, "application/vnd.apple.mpegurl", live_playlist(started.elapsed(), total).as_bytes());
         }
         let segment = path.rsplit('/').next().unwrap_or_default();
-        let body = std::fs::read(root.join("live-src").join(segment)).unwrap_or_default();
+        let body = std::fs::read(root.join(source_dir).join(segment)).unwrap_or_default();
         return respond(&mut stream, "video/mp2t", &body);
     }
     if path == "/evil-live/index.m3u8" {
@@ -210,6 +224,7 @@ struct Host {
     stdin: Option<ChildStdin>,
     events: Receiver<Value>,
     downloads: TempDir,
+    state: TempDir,
 }
 
 impl Host {
@@ -218,13 +233,19 @@ impl Host {
     }
 
     fn start_with_env(tools: &Tools, extra_env: &[(&str, &str)]) -> Self {
-        let downloads = TempDir::new().unwrap();
+        Self::start_in(tools, extra_env, TempDir::new().unwrap(), TempDir::new().unwrap())
+    }
+
+    /// Starts a host on given download/state directories (to simulate a restart after a crash).
+    fn start_in(tools: &Tools, extra_env: &[(&str, &str)], downloads: TempDir, state: TempDir) -> Self {
         let mut child = Command::new(env!("CARGO_BIN_EXE_mediadown-host"))
             .arg("chrome-extension://test/")
             .envs(extra_env.iter().copied())
             .env("MEDIADOWN_YTDLP", &tools.yt_dlp)
             .env("MEDIADOWN_FFMPEG_DIR", &tools.ffmpeg_dir)
             .env("MEDIADOWN_DOWNLOAD_DIR", downloads.path())
+            // Never touch the real profile's recording markers.
+            .env("MEDIADOWN_STATE_DIR", state.path())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
@@ -246,7 +267,7 @@ impl Host {
             }
         });
         let stdin = child.stdin.take();
-        Self { child, stdin, events, downloads }
+        Self { child, stdin, events, downloads, state }
     }
 
     fn send(&mut self, message: Value) {
@@ -499,6 +520,39 @@ fn records_a_live_stream_until_stopped() {
 }
 
 #[test]
+fn records_the_chosen_variant_of_a_live_master() {
+    let tools = require_tools!();
+    let (_media, server) = fixtures(&tools);
+    let mut host = Host::start(&tools);
+    let master = format!("{}/livemaster/master.m3u8", server.origin);
+
+    let mut low = record("low", &master, "Baixa");
+    low["variant"] = json!(1);
+    host.send(low);
+    host.send(record("best", &master, "Melhor"));
+    host.wait_for(recorded_at_least("low", 2));
+    for id in ["low", "best"] {
+        host.send(json!({ "type": "stop", "jobId": id }));
+    }
+    let finals = host.wait_for_jobs(&["low", "best"]);
+    assert!(finals.iter().all(|e| e["type"] == "done"), "{finals:#?}");
+
+    let folder = host.downloads.path().join("Gravações");
+    assert_eq!(video_size(&tools, &folder.join("Baixa.mp4")), "256x144");
+    assert_eq!(video_size(&tools, &folder.join("Melhor.mp4")), "320x240");
+}
+
+#[test]
+fn rejects_absurd_variant_indexes() {
+    let tools = require_tools!();
+    let mut host = Host::start(&tools);
+    let mut request = record("bogus", "https://live.example.com/m.m3u8", "x");
+    request["variant"] = json!(5000);
+    host.send(request);
+    assert_eq!(host.wait_for(is_final("bogus")).pop().unwrap()["error"], "invalidRequest");
+}
+
+#[test]
 fn finishes_when_the_live_ends_and_never_overwrites() {
     let tools = require_tools!();
     let (_media, server) = fixtures(&tools);
@@ -586,6 +640,46 @@ fn closing_the_browser_saves_the_recording() {
     let folder = host.downloads.path().join("Gravações");
     assert_eq!(files_in(&folder), ["Fechou.mp4"]);
     assert!(media_seconds(&tools, &folder.join("Fechou.mp4")) >= 1.5);
+}
+
+#[test]
+fn recovers_a_recording_orphaned_by_a_crash() {
+    let tools = require_tools!();
+    let (media, _server) = fixtures(&tools);
+
+    // What a host killed mid-recording leaves behind: a TS with data and an unlocked marker.
+    let downloads = TempDir::new().unwrap();
+    let state = TempDir::new().unwrap();
+    let folder = downloads.path().join("Gravações");
+    std::fs::create_dir_all(&folder).unwrap();
+    let ts = folder.join("Interrompida.ts");
+    let segments: Vec<u8> = (0..3).flat_map(|i| std::fs::read(media.path().join(format!("live-src/seg{i}.ts"))).unwrap()).collect();
+    std::fs::write(&ts, segments).unwrap();
+    let marker = json!({ "ts": ts, "mp4": folder.join("Interrompida.mp4") });
+    std::fs::write(state.path().join("recording-999-1-0.json"), marker.to_string()).unwrap();
+
+    let host = Host::start_in(&tools, &[], downloads, state);
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while files_in(&folder) != ["Interrompida.mp4"] {
+        assert!(Instant::now() < deadline, "not recovered: {:?}", files_in(&folder));
+        thread::sleep(Duration::from_millis(100));
+    }
+    assert!(media_seconds(&tools, &folder.join("Interrompida.mp4")) >= 2.5);
+    assert_eq!(files_in(host.state.path()), Vec::<String>::new(), "marker removed after recovery");
+}
+
+#[test]
+fn recording_markers_exist_only_while_recording() {
+    let tools = require_tools!();
+    let (_media, server) = fixtures(&tools);
+    let mut host = Host::start(&tools);
+
+    host.send(record("marked", &format!("{}/live/index.m3u8", server.origin), "Marcada"));
+    host.wait_for(recorded_at_least("marked", 1));
+    assert_eq!(files_in(host.state.path()).len(), 1, "an active recording leaves a marker");
+    host.send(json!({ "type": "stop", "jobId": "marked" }));
+    host.wait_for(is_final("marked"));
+    assert_eq!(files_in(host.state.path()), Vec::<String>::new());
 }
 
 #[test]

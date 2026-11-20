@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 
 pub const DEFAULT_MAX_SECONDS: u64 = 6 * 60 * 60;
 pub const DEFAULT_MIN_FREE_BYTES: u64 = 500 * 1024 * 1024;
+/// Master playlists rarely list more than a dozen variants; anything beyond this is bogus input.
+pub const MAX_VARIANT_INDEX: u32 = 63;
 /// Only network protocols: a hostile playlist must not make ffmpeg read local files (file://).
 const PROTOCOL_WHITELIST: &str = "http,https,tcp,tls";
 
@@ -43,6 +45,8 @@ pub struct RecordSpec<'a> {
     pub user_agent: Option<&'a str>,
     pub output: &'a Path,
     pub max_seconds: u64,
+    /// ffmpeg exposes each HLS variant as a program numbered in playlist order.
+    pub variant: Option<u32>,
 }
 
 pub fn record_args(spec: &RecordSpec) -> Vec<OsString> {
@@ -56,9 +60,14 @@ pub fn record_args(spec: &RecordSpec) -> Vec<OsString> {
         args.extend(["-referer".into(), referer.into()]);
     }
     args.extend(["-i".into(), spec.url.into()]);
-    // Default stream selection keeps one video (highest resolution) and one audio track;
-    // subtitles and timed-ID3 data would break the TS/MP4 muxers.
-    args.extend(["-sn", "-dn", "-c", "copy", "-t"].map(OsString::from));
+    match spec.variant {
+        // Only that variant's first video and audio (its audio may be a separate rendition).
+        Some(index) => args.extend(["-map".into(), format!("0:p:{index}:v:0").into(), "-map".into(), format!("0:p:{index}:a:0?").into()]),
+        // Default selection keeps one video (highest resolution) and one audio track;
+        // subtitles and timed-ID3 data would break the TS/MP4 muxers.
+        None => args.extend(["-sn", "-dn"].map(OsString::from)),
+    }
+    args.extend(["-c", "copy", "-t"].map(OsString::from));
     args.push(spec.max_seconds.to_string().into());
     args.extend(["-f", "mpegts", "-progress", "pipe:1"].map(OsString::from));
     args.push(spec.output.into());
@@ -113,6 +122,22 @@ impl ProgressParser {
     }
 }
 
+/// Remuxes a recording to MP4; when that fails, keeps the TS (still playable) instead.
+/// Returns the file the user ends up with.
+pub fn finalize(ffmpeg: &Path, ts: &Path, mp4: &Path) -> PathBuf {
+    let mut command = std::process::Command::new(ffmpeg);
+    command.args(remux_args(ts, mp4)).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    crate::platform::configure_command(&mut command);
+    let remuxed = command.status().is_ok_and(|status| status.success()) && std::fs::metadata(mp4).is_ok_and(|m| m.len() > 0);
+    if remuxed {
+        let _ = std::fs::remove_file(ts);
+        mp4.to_owned()
+    } else {
+        let _ = std::fs::remove_file(mp4);
+        ts.to_owned()
+    }
+}
+
 pub fn free_space(path: &Path) -> Option<u64> {
     fs4::available_space(path).ok()
 }
@@ -136,6 +161,7 @@ mod tests {
             user_agent: Some("Mozilla/5.0"),
             output,
             max_seconds: 21600,
+            variant: None,
         }
     }
 
@@ -155,6 +181,15 @@ mod tests {
         assert!(joined.contains("-user_agent Mozilla/5.0 -referer https://example.com/ao-vivo -i https://live.example.com/canal/index.m3u8"));
         assert!(joined.contains("-sn -dn -c copy -t 21600 -f mpegts -progress pipe:1 out.ts"));
         assert!(!joined.contains("-nostdin"), "stdin must stay open: it carries the stop command");
+    }
+
+    #[test]
+    fn maps_only_the_chosen_variant() {
+        let mut chosen = spec(Path::new("out.ts"));
+        chosen.variant = Some(2);
+        let joined = strings(record_args(&chosen)).join(" ");
+        assert!(joined.contains("-i https://live.example.com/canal/index.m3u8 -map 0:p:2:v:0 -map 0:p:2:a:0? -c copy"));
+        assert!(!joined.contains("-sn"));
     }
 
     #[test]

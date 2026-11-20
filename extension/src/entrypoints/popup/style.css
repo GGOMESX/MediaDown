@@ -46,8 +46,10 @@ body {
 
 .empty { color: var(--muted); padding: 16px 4px; }
 
-.popup__footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
-.popup__footer--ok { color: var(--ok); }
+.popup__footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; display: grid; gap: 2px; }
+.popup__footer p { margin: 0; }
+.popup__status--ok { color: var(--ok); }
+.popup__versions { font-variant-numeric: tabular-nums; }
 .empty p { margin: 0 0 6px; }
 .empty__hint { font-size: 12px; }
 

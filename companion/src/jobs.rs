@@ -12,6 +12,7 @@ use crate::engine::{self, DownloadSpec, EngineLine, EnginePaths, Quality};
 use crate::platform::{self, ProcessTree};
 use crate::protocol::{ErrorCode, Event, PROTOCOL_VERSION, Request};
 use crate::recorder::{self, Limits, ProgressParser, RecordSpec, StopReason};
+use crate::recovery::{self, ActiveRecording};
 use crate::validation::{self, ValidationError};
 
 const MAX_STDERR_BYTES: usize = 64 * 1024;
@@ -40,6 +41,8 @@ pub struct Config {
     pub engines: EnginePaths,
     pub max_concurrent: usize,
     pub recording_limits: Limits,
+    /// Where markers of active recordings live, for recovery after a crash.
+    pub state_dir: PathBuf,
 }
 
 #[derive(Clone, Copy)]
@@ -140,9 +143,12 @@ impl JobManager {
                     Err(error) => self.reject(job_id, error),
                 }
             }
-            Request::Record { job_id, url, referer, user_agent, folder, file_name } => {
+            Request::Record { job_id, url, referer, user_agent, folder, file_name, variant } => {
+                if variant.is_some_and(|index| index > recorder::MAX_VARIANT_INDEX) {
+                    return self.reject(job_id, ValidationError::InvalidQuality);
+                }
                 match self.validate(&job_id, &url, referer, user_agent, &folder, &file_name) {
-                    Ok((id, source)) => self.start_recording(id, source),
+                    Ok((id, source)) => self.start_recording(id, source, variant),
                     Err(error) => self.reject(job_id, error),
                 }
             }
@@ -260,9 +266,9 @@ impl JobManager {
 
     // ---------- recordings (ffmpeg, immediate) ----------
 
-    fn start_recording(&mut self, job_id: String, source: Source) {
+    fn start_recording(&mut self, job_id: String, source: Source, variant: Option<u32>) {
         self.known_ids.insert(job_id.clone());
-        match self.spawn_recording(&job_id, source) {
+        match self.spawn_recording(&job_id, source, variant) {
             Ok(running) => {
                 self.running.insert(job_id.clone(), running);
                 self.emit(Event::Started { job_id });
@@ -271,7 +277,7 @@ impl JobManager {
         }
     }
 
-    fn spawn_recording(&self, job_id: &str, source: Source) -> Result<RunningJob, (ErrorCode, String)> {
+    fn spawn_recording(&self, job_id: &str, source: Source, variant: Option<u32>) -> Result<RunningJob, (ErrorCode, String)> {
         let recordings = self.running.values().filter(|job| job.recording.is_some()).count();
         if recordings >= MAX_RECORDINGS {
             return Err((ErrorCode::Busy, format!("no máximo {MAX_RECORDINGS} gravações ao mesmo tempo")));
@@ -293,6 +299,7 @@ impl JobManager {
             user_agent: source.user_agent.as_deref(),
             output: &ts,
             max_seconds: limits.max_seconds,
+            variant,
         };
         let mut command = Command::new(&ffmpeg);
         command
@@ -302,6 +309,8 @@ impl JobManager {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
+        // Registered before ffmpeg starts, so even an immediate crash leaves a recoverable trace.
+        let marker = recovery::register(&self.config.state_dir, &ts, &mp4).map_err(|e| (ErrorCode::Unknown, e.to_string()))?;
         let (child, tree, stdout, stderr, stdin) = spawn_tracked(command)?;
         let recording = Arc::new(Recording { stdin: Mutex::new(stdin), reason: Mutex::new(None) });
         let watcher = RecordWatcher {
@@ -314,6 +323,7 @@ impl JobManager {
             mp4,
             ffmpeg,
             limits,
+            marker,
         };
         thread::spawn(move || watcher.watch(stdout, stderr));
         Ok(RunningJob { child, tree, canceled: Arc::new(AtomicBool::new(false)), recording: Some(recording) })
@@ -469,6 +479,7 @@ struct RecordWatcher {
     mp4: PathBuf,
     ffmpeg: PathBuf,
     limits: Limits,
+    marker: ActiveRecording,
 }
 
 impl RecordWatcher {
@@ -482,11 +493,12 @@ impl RecordWatcher {
         let outcome = if recorded_anything {
             let reached_limit = elapsed.is_some_and(|seconds| seconds + 1 >= self.limits.max_seconds);
             let stop_reason = self.recording.reason().or(reached_limit.then_some(StopReason::MaxDuration));
-            Outcome::Done { path: self.finalize(), stop_reason }
+            Outcome::Done { path: recorder::finalize(&self.ffmpeg, &self.ts, &self.mp4), stop_reason }
         } else {
             let _ = std::fs::remove_file(&self.ts);
             Outcome::Failed(engine::classify_ffmpeg_error(&stderr_text), stderr_text.lines().last().unwrap_or_default().chars().take(300).collect())
         };
+        self.marker.finish();
         let _ = self.manager.send(ManagerMsg::Finished { job_id: self.job_id, outcome });
     }
 
@@ -516,21 +528,6 @@ impl RecordWatcher {
             }
         });
         elapsed
-    }
-
-    /// MP4 when the remux works; otherwise the TS is kept as is (still playable).
-    fn finalize(&self) -> PathBuf {
-        let mut command = Command::new(&self.ffmpeg);
-        command.args(recorder::remux_args(&self.ts, &self.mp4)).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-        platform::configure_command(&mut command);
-        let remuxed = command.status().is_ok_and(|status| status.success()) && std::fs::metadata(&self.mp4).is_ok_and(|m| m.len() > 0);
-        if remuxed {
-            let _ = std::fs::remove_file(&self.ts);
-            self.mp4.clone()
-        } else {
-            let _ = std::fs::remove_file(&self.mp4);
-            self.ts.clone()
-        }
     }
 }
 

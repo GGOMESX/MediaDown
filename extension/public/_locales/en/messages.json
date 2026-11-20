@@ -256,5 +256,14 @@
   },
   "refusalNotLive": {
     "message": "This video is not a live stream: use Download."
+  },
+  "versionsLine": {
+    "message": "Extension $1 · App $2"
+  },
+  "versionsLineNoApp": {
+    "message": "Extension $1"
+  },
+  "versionMismatch": {
+    "message": "The extension and the app are from different versions. Install both from the same release."
   }
 }

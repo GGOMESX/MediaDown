@@ -32,6 +32,7 @@ extension (service worker) ──connectNative──► mediadown-host.exe
 | `validation.rs` | http/https URLs, header values without CR/LF, file and folder names safe on Windows, escaping `%` in the yt-dlp template |
 | `engine.rs` | yt-dlp arguments (`--ignore-config`, `--` before the URL, quality `best`/`maxHeight`/`audioMp3`, subtitles as `.srt`), progress parsing and error classification |
 | `jobs.rs` | Download queue (2 at a time), recordings beside it (up to 2), cancellation, clean stop, "show in folder" only for files the host created |
+| `recovery.rs` | Markers of active recordings under an exclusive OS lock; at startup, orphaned recordings (lock free) are converted to MP4. Safe with several hosts at once (Chrome and Edge) |
 | `recorder.rs` | Live recording with ffmpeg: `-protocol_whitelist http,https,tcp,tls`, MPEG-TS then MP4 remux, `-progress` parsing, unique names, 6 h cap and disk-space stop |
 | `platform.rs` | Windows: Job Object `KILL_ON_JOB_CLOSE`, `CREATE_NO_WINDOW`, Explorer |
 
@@ -64,7 +65,7 @@ MEDIADOWN_TEST_YTDLP=$(which yt-dlp) MEDIADOWN_TEST_FFMPEG_DIR=/usr/bin cargo te
 
 Environment variables honored by the host (tests only): `MEDIADOWN_YTDLP`,
 `MEDIADOWN_FFMPEG_DIR`, `MEDIADOWN_DOWNLOAD_DIR`, `MEDIADOWN_MAX_RECORDING_SECONDS`,
-`MEDIADOWN_MIN_FREE_BYTES`.
+`MEDIADOWN_MIN_FREE_BYTES`, `MEDIADOWN_STATE_DIR`.
 
 ### Updating yt-dlp or ffmpeg
 

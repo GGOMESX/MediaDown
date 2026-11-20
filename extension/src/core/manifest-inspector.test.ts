@@ -68,6 +68,10 @@ describe('inspectManifest (HLS structure)', () => {
     expect(master.heights).toEqual([1080, 720, 360]);
   });
 
+  it('keeps each variant height in playlist order (how ffmpeg numbers variants)', () => {
+    expect(master.variantHeights).toEqual([360, 1080, 720, 720]);
+  });
+
   it('lists subtitle languages but not audio renditions', () => {
     expect(master.subtitleLanguages).toEqual(['pt-BR', 'en']);
   });

@@ -7,7 +7,7 @@ import { applyDownloadStarted } from './tab-media';
 import { applyJobStarted, newJobId } from './companion-job';
 import { loadSettings } from './settings';
 import { buildDownloadPath, chooseBaseName, chooseStem, recordingStem, toAsciiPath } from './file-name';
-import { presetToChoice } from './quality';
+import { presetToChoice, variantForChoice } from './quality';
 import { vttToSrt } from './subtitles';
 import { rememberPending, pendingIdForDownload, pendingIdForJob } from './history';
 
@@ -59,6 +59,7 @@ export async function startRecording(request: RecordRequest, companion: Companio
       userAgent: navigator.userAgent,
       folder: settings.folder,
       fileName: recordingStem(chooseStem(media.url, tab.title ?? ''), now),
+      variant: request.quality ? variantForChoice(media.variantHeights ?? [], request.quality) : undefined,
     });
     return { ok: true, via: 'companion', jobId };
   } catch {
