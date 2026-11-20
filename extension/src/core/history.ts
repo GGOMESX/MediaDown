@@ -20,6 +20,10 @@ export type PendingEntry = Omit<HistoryEntry, 'fileName' | 'completedAt' | 'size
 export const MAX_HISTORY = 200;
 const HISTORY_KEY = 'history';
 const PENDING_KEY = 'history-pending';
+/** Completions that arrived before their start was recorded (tiny files finish that fast). */
+const EARLY_KEY = 'history-early';
+
+type CompletionResult = { fileName?: string; sizeBytes?: number; completedAt: number };
 
 export const pendingIdForDownload = (downloadId: number) => `d${downloadId}`;
 export const pendingIdForJob = (jobId: string) => `j${jobId}`;
@@ -44,40 +48,55 @@ export async function clearHistory(): Promise<void> {
 export async function rememberPending(entry: PendingEntry): Promise<void> {
   if (!(await loadSettings()).keepHistory) return;
   await serialized(async () => {
-    const pending = await readPending();
+    const early = await readMap<CompletionResult>(EARLY_KEY);
+    const result = early[entry.id];
+    if (result) {
+      delete early[entry.id];
+      await browser.storage.session.set({ [EARLY_KEY]: early });
+      return record(entry, result);
+    }
+    const pending = await readMap<PendingEntry>(PENDING_KEY);
     await browser.storage.session.set({ [PENDING_KEY]: { ...pending, [entry.id]: entry } });
   });
 }
 
 export async function completePending(id: string, result: { fileName?: string; sizeBytes?: number }, now = Date.now()): Promise<void> {
   await serialized(async () => {
-    const pending = await readPending();
+    const pending = await readMap<PendingEntry>(PENDING_KEY);
     const entry = pending[id];
-    if (!entry) return;
+    if (!entry) {
+      // The start may not be recorded yet: keep the result until it is.
+      const early = await readMap<CompletionResult>(EARLY_KEY);
+      await browser.storage.session.set({ [EARLY_KEY]: { ...early, [id]: { ...result, completedAt: now } } });
+      return;
+    }
     delete pending[id];
     await browser.storage.session.set({ [PENDING_KEY]: pending });
+    await record(entry, { ...result, completedAt: now });
+  });
+}
 
-    const fileName = result.fileName || entry.fileName;
-    if (!fileName || !(await loadSettings()).keepHistory) return;
-    const history = await readHistory();
-    await browser.storage.local.set({
-      [HISTORY_KEY]: addEntry(history, { ...entry, fileName, sizeBytes: result.sizeBytes, completedAt: now }),
-    });
+async function record(entry: PendingEntry, result: CompletionResult) {
+  const fileName = result.fileName || entry.fileName;
+  if (!fileName || !(await loadSettings()).keepHistory) return;
+  const history = await readHistory();
+  await browser.storage.local.set({
+    [HISTORY_KEY]: addEntry(history, { ...entry, fileName, sizeBytes: result.sizeBytes, completedAt: result.completedAt }),
   });
 }
 
 export async function dropPending(id: string): Promise<void> {
   await serialized(async () => {
-    const pending = await readPending();
+    const pending = await readMap<PendingEntry>(PENDING_KEY);
     if (!(id in pending)) return;
     delete pending[id];
     await browser.storage.session.set({ [PENDING_KEY]: pending });
   });
 }
 
-async function readPending(): Promise<Record<string, PendingEntry>> {
-  const stored = await browser.storage.session.get(PENDING_KEY);
-  return { ...((stored[PENDING_KEY] as Record<string, PendingEntry> | undefined) ?? {}) };
+async function readMap<T>(key: string): Promise<Record<string, T>> {
+  const stored = await browser.storage.session.get(key);
+  return { ...((stored[key] as Record<string, T> | undefined) ?? {}) };
 }
 
 let queue: Promise<unknown> = Promise.resolve();

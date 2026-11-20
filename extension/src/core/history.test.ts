@@ -29,9 +29,15 @@ describe('pending downloads', () => {
     expect(await readHistory()).toEqual([{ ...pending('jt1-a'), fileName: 'Aula 1.mp4', sizeBytes: 900, completedAt: 1234 }]);
   });
 
-  it('ignores completions it never saw start', async () => {
+  it('does not record a completion on its own (no start info yet)', async () => {
     await completePending('unknown', { fileName: 'x.mp4' });
     expect(await readHistory()).toEqual([]);
+  });
+
+  it('records downloads that finished before their start was written (tiny files)', async () => {
+    await completePending('d7', { fileName: 'legenda.srt', sizeBytes: 57 }, 999);
+    await rememberPending(pending('d7'));
+    expect(await readHistory()).toEqual([{ ...pending('d7'), fileName: 'legenda.srt', sizeBytes: 57, completedAt: 999 }]);
   });
 
   it('forgets failed downloads', async () => {
