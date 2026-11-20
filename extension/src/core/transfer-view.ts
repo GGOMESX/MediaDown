@@ -1,5 +1,5 @@
 import type { DownloadError } from './download-errors';
-import type { CompanionError, CompanionJob } from './companion-job';
+import type { CompanionError, CompanionJob, StopReason } from './companion-job';
 import type { DetectedMedia } from './media-classifier';
 
 export interface BrowserDownloadStatus {
@@ -18,6 +18,9 @@ export interface TransferView {
   totalBytes?: number;
   speed?: number;
   error?: TransferError;
+  recording?: boolean;
+  elapsedSeconds?: number;
+  stopReason?: StopReason;
 }
 
 const IDLE: TransferView = { via: 'browser', state: 'idle' };
@@ -29,10 +32,12 @@ export function toTransferView(media: DetectedMedia, browserStatus: BrowserDownl
   return IDLE;
 }
 
-export type PrimaryAction = 'download' | 'downloadWithApp' | 'retry' | 'downloadAgain' | 'cancel' | 'showInFolder' | 'none';
+export type PrimaryAction =
+  | 'download' | 'downloadWithApp' | 'retry' | 'downloadAgain' | 'cancel' | 'showInFolder' | 'record' | 'stopRecording' | 'none';
 
 export function primaryAction(media: DetectedMedia, view: TransferView, companionReady: boolean): PrimaryAction {
-  if (media.protection !== 'clear' || media.live) return 'none';
+  if (media.protection !== 'clear') return 'none';
+  if (media.live) return liveAction(view, companionReady);
   switch (view.state) {
     case 'queued':
     case 'running':
@@ -48,6 +53,13 @@ export function primaryAction(media: DetectedMedia, view: TransferView, companio
   }
 }
 
+/** Lives are recorded (never downloaded), and only the companion can record. */
+function liveAction(view: TransferView, companionReady: boolean): PrimaryAction {
+  if (view.state === 'queued' || view.state === 'running') return view.recording ? 'stopRecording' : 'cancel';
+  if (view.state === 'done') return 'showInFolder';
+  return companionReady ? 'record' : 'none';
+}
+
 function fromJob(job: CompanionJob): TransferView {
   return {
     via: 'companion',
@@ -56,6 +68,7 @@ function fromJob(job: CompanionJob): TransferView {
     totalBytes: job.totalBytes,
     speed: job.speed,
     error: job.error,
+    ...(job.recording ? { recording: true, elapsedSeconds: job.elapsedSeconds, stopReason: job.stopReason } : {}),
   };
 }
 

@@ -12,6 +12,11 @@ describe('parseRequest', () => {
       .toEqual({ type: 'download', tabId: 3, mediaKey: 'k', quality: { mode: 'maxHeight', height: 720 } });
   });
 
+  it('accepts record and stop requests', () => {
+    expect(parseRequest({ type: 'record', tabId: 2, mediaKey: 'k' })).toEqual({ type: 'record', tabId: 2, mediaKey: 'k' });
+    expect(parseRequest({ type: 'stop', tabId: 2, mediaKey: 'k', extra: true })).toEqual({ type: 'stop', tabId: 2, mediaKey: 'k' });
+  });
+
   it('accepts cancel, reveal and status requests', () => {
     expect(parseRequest({ type: 'cancel', tabId: 1, mediaKey: 'k' })).toEqual({ type: 'cancel', tabId: 1, mediaKey: 'k' });
     expect(parseRequest({ type: 'reveal', tabId: 1, mediaKey: 'k' })).toEqual({ type: 'reveal', tabId: 1, mediaKey: 'k' });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeFileName, sanitizeFolder, buildDownloadPath, chooseBaseName, chooseStem, toAsciiPath } from './file-name';
+import { sanitizeFileName, sanitizeFolder, buildDownloadPath, chooseBaseName, chooseStem, toAsciiPath, recordingStem } from './file-name';
 
 describe('sanitizeFileName', () => {
   it('replaces characters forbidden on Windows, macOS and Linux', () => {
@@ -102,5 +102,11 @@ describe('chooseStem', () => {
 
   it('falls back to the URL name when there is no title', () => {
     expect(chooseStem('https://c.example.com/v/master.m3u8', '')).toBe('master');
+  });
+});
+
+describe('recordingStem', () => {
+  it('appends the local start date and time', () => {
+    expect(recordingStem('Canal 24h', new Date(2026, 10, 20, 9, 5))).toBe('Canal 24h — gravação 2026-11-20 09h05');
   });
 });

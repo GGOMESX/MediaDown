@@ -1,12 +1,12 @@
 import { browser } from 'wxt/browser';
-import type { DownloadRequest, DownloadResponse, DownloadRefusal, CompanionState } from './messages';
+import type { DownloadRequest, DownloadResponse, DownloadRefusal, CompanionState, RecordRequest } from './messages';
 import type { DetectedMedia } from './media-classifier';
 import type { CompanionGateway } from './companion-client';
 import { readTabMedia, updateTabMedia } from './tab-media-store';
 import { applyDownloadStarted } from './tab-media';
 import { applyJobStarted, newJobId } from './companion-job';
 import { loadSettings } from './settings';
-import { buildDownloadPath, chooseBaseName, chooseStem, toAsciiPath } from './file-name';
+import { buildDownloadPath, chooseBaseName, chooseStem, recordingStem, toAsciiPath } from './file-name';
 import { presetToChoice } from './quality';
 import { vttToSrt } from './subtitles';
 import { rememberPending, pendingIdForDownload, pendingIdForJob } from './history';
@@ -36,7 +36,37 @@ export async function startDownload(request: DownloadRequest, companion: Compani
   }
 }
 
-export async function controlJob(action: 'cancel' | 'reveal', tabId: number, mediaKey: string, companion: CompanionGateway): Promise<boolean> {
+/** Lives are recorded by the companion with ffmpeg, from now until the user stops (or the live ends). */
+export async function startRecording(request: RecordRequest, companion: CompanionGateway, now = new Date()): Promise<DownloadResponse> {
+  const media = await findMedia(request.tabId, request.mediaKey);
+  if (!media) return { ok: false, reason: 'notFound' };
+  if (media.protection !== 'clear') return { ok: false, reason: 'protected' };
+  if (!media.live) return { ok: false, reason: 'notLive' };
+
+  try {
+    const status = await companion.status();
+    if (status.state !== 'ready') return { ok: false, reason: REFUSAL_BY_COMPANION_STATE[status.state] };
+
+    const [settings, tab] = await Promise.all([loadSettings(), readTab(request.tabId)]);
+    const jobId = newJobId(request.tabId);
+    await updateTabMedia(request.tabId, list => applyJobStarted(list, media.key, jobId, true));
+    await rememberPending({ id: pendingIdForJob(jobId), via: 'companion', kind: media.kind, ...pageInfo(tab) });
+    await companion.send({
+      type: 'record',
+      jobId,
+      url: media.url,
+      referer: tab.url && /^https?:/.test(tab.url) ? tab.url : undefined,
+      userAgent: navigator.userAgent,
+      folder: settings.folder,
+      fileName: recordingStem(chooseStem(media.url, tab.title ?? ''), now),
+    });
+    return { ok: true, via: 'companion', jobId };
+  } catch {
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export async function controlJob(action: 'stop' | 'cancel' | 'reveal', tabId: number, mediaKey: string, companion: CompanionGateway): Promise<boolean> {
   const jobId = (await findMedia(tabId, mediaKey))?.job?.id;
   if (!jobId) return false;
   await companion.send({ type: action, jobId });

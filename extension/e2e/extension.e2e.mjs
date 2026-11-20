@@ -137,8 +137,8 @@ test('flags live streams, catches encryption hidden in variants, lists resolutio
   const popup = await openPopupWithMediaOf(tabId);
   const live = itemNamed(popup, 'live/index.m3u8');
   await live.getByText('Ao vivo', { exact: true }).waitFor();
-  await live.getByText('a gravação ainda não é suportada', { exact: false }).waitFor();
-  assert.equal(await live.getByRole('button', { name: 'Baixar' }).count(), 0);
+  await live.getByText('Para gravar, instale o app MediaDown', { exact: false }).waitFor();
+  assert.equal(await live.getByRole('button', { name: /Baixar|Gravar/ }).count(), 0, 'no companion: nothing to start');
   await itemNamed(popup, 'multi/master.m3u8').getByText('Legendas: pt-BR').waitFor();
   if (process.env.MEDIADOWN_E2E_SCREENSHOTS) {
     await popup.screenshot({ path: path.join(process.env.MEDIADOWN_E2E_SCREENSHOTS, 'popup-sprint4.png'), fullPage: true });

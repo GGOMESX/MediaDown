@@ -26,8 +26,22 @@ describe('primaryAction', () => {
     expect(primaryAction({ ...file, protection: 'protected' }, { via: 'browser', state: 'idle' }, true)).toBe('none');
   });
 
-  it('offers nothing for live streams', () => {
-    expect(primaryAction({ ...stream, live: true }, { via: 'browser', state: 'idle' }, true)).toBe('none');
+  it('offers recording for live streams, only with the companion', () => {
+    const live = { ...stream, live: true };
+    expect(primaryAction(live, { via: 'browser', state: 'idle' }, true)).toBe('record');
+    expect(primaryAction(live, { via: 'browser', state: 'idle' }, false)).toBe('none');
+    expect(primaryAction(live, { via: 'companion', state: 'running', recording: true }, true)).toBe('stopRecording');
+    expect(primaryAction(live, { via: 'companion', state: 'done', recording: true }, true)).toBe('showInFolder');
+    expect(primaryAction(live, { via: 'companion', state: 'failed', recording: true, error: 'network' }, true)).toBe('record');
+  });
+
+  it('never offers recording for protected lives', () => {
+    expect(primaryAction({ ...stream, live: true, protection: 'protected' }, { via: 'browser', state: 'idle' }, true)).toBe('none');
+  });
+
+  it('exposes recording details in the view', () => {
+    const view = toTransferView({ ...stream, job: { id: 't1-r', state: 'running', recording: true, elapsedSeconds: 30, downloadedBytes: 10 } }, undefined);
+    expect(view).toMatchObject({ recording: true, elapsedSeconds: 30, receivedBytes: 10 });
   });
 
   it('follows the transfer state', () => {

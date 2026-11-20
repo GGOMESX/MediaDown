@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import { browser } from 'wxt/browser';
 import type { DetectedMedia } from '@/core/media-classifier';
 import type { DownloadRequest, DownloadResponse } from '@/core/messages';
-import { displayName, formatBytes } from '@/core/format';
+import { displayName, formatBytes, formatDuration } from '@/core/format';
 import { toTransferView, primaryAction, type BrowserDownloadStatus, type PrimaryAction } from '@/core/transfer-view';
 import { t, TRANSFER_ERROR_MESSAGE, REFUSAL_MESSAGE, type MessageKey } from '@/core/i18n';
 import { qualityOptions, defaultOption, type QualityOption } from '@/core/quality';
@@ -35,7 +35,10 @@ const ACTION_LABEL: Record<Exclude<PrimaryAction, 'none'>, MessageKey> = {
   downloadAgain: 'downloadAgain',
   cancel: 'cancel',
   showInFolder: 'showInFolder',
+  record: 'record',
+  stopRecording: 'stopRecording',
 };
+const STOP_REASON_MESSAGE = { diskFull: 'stopReasonDiskFull', maxDuration: 'stopReasonMaxDuration' } as const;
 
 const locale = navigator.language;
 const name = computed(() => displayName(props.media.url));
@@ -69,7 +72,11 @@ const progressPercent = computed(() => {
 });
 
 const progressLabel = computed(() => {
-  const { state, receivedBytes, totalBytes, speed } = view.value;
+  const { state, receivedBytes, totalBytes, speed, recording, elapsedSeconds } = view.value;
+  if (recording && state === 'running') {
+    const elapsed = t('recordingProgress', formatDuration(elapsedSeconds ?? 0));
+    return receivedBytes ? `${elapsed} · ${t('recordingSize', formatBytes(receivedBytes, locale))}` : elapsed;
+  }
   if (state === 'queued') return t('queued');
   const received = formatBytes(receivedBytes || 1, locale);
   const amount = totalBytes ? t('progressOf', [received, formatBytes(totalBytes, locale)]) : t('progressReceived', received);
@@ -101,6 +108,12 @@ async function runAction() {
       case 'downloadWithApp':
         await requestDownload('companion');
         break;
+      case 'record':
+        await sendAndExplain({ type: 'record', tabId: props.tabId, mediaKey: props.media.key });
+        break;
+      case 'stopRecording':
+        await browser.runtime.sendMessage({ type: 'stop', tabId: props.tabId, mediaKey: props.media.key });
+        break;
       default:
         // A retry goes through the same route as the failed attempt.
         await requestDownload(view.value.via === 'companion' ? 'companion' : undefined);
@@ -113,6 +126,10 @@ async function runAction() {
 async function requestDownload(via?: 'companion') {
   const quality = isStream.value ? options.value.find(o => o.value === selectedQuality.value)?.choice : undefined;
   const request: DownloadRequest = { type: 'download', tabId: props.tabId, mediaKey: props.media.key, ...(via && { via }), ...(quality && { quality }) };
+  await sendAndExplain(request);
+}
+
+async function sendAndExplain(request: DownloadRequest | { type: 'record'; tabId: number; mediaKey: string }) {
   const response = (await browser.runtime.sendMessage(request)) as DownloadResponse | undefined;
   if (!response?.ok) refusal.value = REFUSAL_MESSAGE[response?.reason ?? 'failed'];
 }
@@ -145,7 +162,11 @@ async function copyUrl() {
         <button
           v-if="action !== 'none'"
           class="button"
-          :class="{ 'button--secondary': action === 'cancel' || action === 'showInFolder' }"
+          :class="{
+            'button--secondary': action === 'cancel' || action === 'showInFolder',
+            'button--record': action === 'record',
+            'button--stop': action === 'stopRecording',
+          }"
           type="button"
           :disabled="busy"
           @click="runAction"
@@ -156,7 +177,11 @@ async function copyUrl() {
       </div>
     </div>
 
-    <div v-if="isActive" class="progress">
+    <div v-if="isActive && view.recording" class="recording" role="status" aria-live="off">
+      <span class="recording__dot" aria-hidden="true" />
+      <span class="progress__label">{{ progressLabel }}</span>
+    </div>
+    <div v-else-if="isActive" class="progress">
       <div
         class="progress__track"
         role="progressbar"
@@ -177,7 +202,9 @@ async function copyUrl() {
     <span v-if="view.state === 'done'" class="item__ok">{{ t('downloadComplete') }}<template v-if="media.job?.fileName"> · {{ media.job.fileName }}</template></span>
     <span v-if="media.subtitleLanguages?.length" class="item__hint">{{ t('subtitleTracks', media.subtitleLanguages.join(', ')) }}</span>
     <span v-if="isProtected" class="item__note">{{ t('drmExplanation') }}</span>
-    <span v-else-if="media.live" class="item__hint">{{ t('liveNotSupported') }}</span>
+    <span v-else-if="media.live && action === 'record'" class="item__hint">{{ t('liveRecordHint') }}</span>
+    <span v-else-if="media.live && action === 'none'" class="item__hint">{{ t('liveNotSupported') }}</span>
+    <span v-if="view.stopReason" class="item__note" role="alert">{{ t(STOP_REASON_MESSAGE[view.stopReason]) }}</span>
     <span v-else-if="showCompanionHint" class="item__hint">{{ t('needsCompanion') }}</span>
     <span v-if="errorMessage" class="item__note" role="alert">{{ errorMessage }}</span>
   </li>

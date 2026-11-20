@@ -177,7 +177,7 @@
     "message": "Live"
   },
   "liveNotSupported": {
-    "message": "Live stream: recording is not supported yet. Download it once it ends and becomes a recorded video."
+    "message": "Live stream. To record it, install the MediaDown app for Windows."
   },
   "qualityLabel": {
     "message": "Quality"
@@ -229,5 +229,32 @@
   },
   "optionsHistoryLabel": {
     "message": "Keep download history (this browser only)"
+  },
+  "record": {
+    "message": "Record"
+  },
+  "stopRecording": {
+    "message": "Stop and save"
+  },
+  "recordingProgress": {
+    "message": "Recording · $1"
+  },
+  "recordingSize": {
+    "message": "$1 recorded"
+  },
+  "liveRecordHint": {
+    "message": "Records in the best available quality until you stop or the stream ends (max. 6 h)."
+  },
+  "stopReasonDiskFull": {
+    "message": "Recording stopped automatically: low disk space."
+  },
+  "stopReasonMaxDuration": {
+    "message": "Recording stopped at the 6-hour limit."
+  },
+  "errorBusy": {
+    "message": "2 recordings are already running. Stop one to start another."
+  },
+  "refusalNotLive": {
+    "message": "This video is not a live stream: use Download."
   }
 }

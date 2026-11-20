@@ -2,9 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
 
 use crate::engine::Quality;
+use crate::recorder::StopReason;
 
 /// v2: `quality` (best / maxHeight / audioMp3) replaces `preset`; adds `subtitles`.
-pub const PROTOCOL_VERSION: u32 = 2;
+/// v3: live recording (`record` / `stop`), `elapsedSeconds` in progress, `stopReason` in done.
+pub const PROTOCOL_VERSION: u32 = 3;
 /// Chrome refuses host-to-browser messages above 1 MB.
 const MAX_OUTGOING_BYTES: usize = 1024 * 1024;
 /// Our requests are tiny; anything bigger is a bug or an attack.
@@ -24,6 +26,16 @@ pub enum Request {
         quality: Quality,
         subtitles: bool,
     },
+    Record {
+        job_id: String,
+        url: String,
+        referer: Option<String>,
+        user_agent: Option<String>,
+        folder: String,
+        file_name: String,
+    },
+    /// Ends a recording cleanly and keeps what was recorded.
+    Stop { job_id: String },
     Cancel { job_id: String },
     Reveal { job_id: String },
 }
@@ -39,6 +51,8 @@ pub enum ErrorCode {
     DiskFull,
     Drm,
     Canceled,
+    /// Too many recordings at once.
+    Busy,
     Unknown,
 }
 
@@ -48,8 +62,16 @@ pub enum Event {
     Hello { protocol_version: u32, host_version: String, engine_ready: bool, engine_version: Option<String> },
     Queued { job_id: String },
     Started { job_id: String },
-    Progress { job_id: String, downloaded_bytes: Option<u64>, total_bytes: Option<u64>, speed: Option<f64>, eta_seconds: Option<u64> },
-    Done { job_id: String, file_name: String },
+    Progress {
+        job_id: String,
+        downloaded_bytes: Option<u64>,
+        total_bytes: Option<u64>,
+        speed: Option<f64>,
+        eta_seconds: Option<u64>,
+        /// Recordings only: how much has been recorded so far.
+        elapsed_seconds: Option<u64>,
+    },
+    Done { job_id: String, file_name: String, stop_reason: Option<StopReason> },
     Failed { job_id: String, error: ErrorCode, detail: String },
     InvalidRequest { detail: String },
 }
@@ -135,6 +157,20 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(request, Request::Download { quality: Quality::MaxHeight { height: 720 }, subtitles: true, .. }));
+    }
+
+    #[test]
+    fn parses_record_and_stop_requests() {
+        let record = parse_request(br#"{"type":"record","jobId":"r1","url":"https://live.example.com/i.m3u8","referer":null,"userAgent":"UA","folder":"","fileName":"Live"}"#);
+        assert!(matches!(record, Ok(Request::Record { .. })));
+        assert_eq!(parse_request(br#"{"type":"stop","jobId":"r1"}"#), Ok(Request::Stop { job_id: "r1".into() }));
+    }
+
+    #[test]
+    fn serializes_stop_reasons() {
+        let mut output = Vec::new();
+        write_event(&mut output, &Event::Done { job_id: "r1".into(), file_name: "a.mp4".into(), stop_reason: Some(StopReason::DiskFull) }).unwrap();
+        assert_eq!(&output[4..], br#"{"type":"done","jobId":"r1","fileName":"a.mp4","stopReason":"diskFull"}"#);
     }
 
     #[test]

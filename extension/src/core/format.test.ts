@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatBytes, displayName } from './format';
+import { formatBytes, displayName, formatDuration } from './format';
 
 describe('formatBytes', () => {
   it.each([
@@ -28,5 +28,16 @@ describe('displayName', () => {
 
   it('survives malformed percent-encoding', () => {
     expect(displayName('https://c.example.com/bad%E0%A4%A.mp4')).toBe('bad%E0%A4%A.mp4');
+  });
+});
+
+describe('formatDuration', () => {
+  it.each([
+    [0, '00:00'],
+    [75, '01:15'],
+    [3725, '1:02:05'],
+    [-4, '00:00'],
+  ])('formats %s seconds as %s', (seconds, expected) => {
+    expect(formatDuration(seconds)).toBe(expected);
   });
 });

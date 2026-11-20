@@ -7,6 +7,7 @@
   --accent-text: #ffffff;
   --ok: #15803d;
   --danger: #b91c1c;
+  --danger-text: #ffffff;
   --warn: #a16207;
   --border: #e3e5e9;
   color-scheme: light dark;
@@ -22,6 +23,7 @@
     --accent-text: #0b1220;
     --ok: #4ade80;
     --danger: #f87171;
+    --danger-text: #1f0a0a;
     --warn: #facc15;
     --border: #30343b;
   }
@@ -85,6 +87,14 @@ body {
 .button:hover { filter: brightness(1.08); }
 .button:disabled { opacity: 0.6; cursor: progress; }
 .button--secondary { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+.button--record { background: var(--danger); color: var(--danger-text); }
+.button--stop { background: transparent; color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger); }
+
+.recording { display: flex; align-items: center; gap: 6px; }
+.recording__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .recording__dot { animation: none; } }
 
 .link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-size: 11px; cursor: pointer; text-decoration: none; }
 .link:hover { text-decoration: underline; }

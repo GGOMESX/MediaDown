@@ -129,7 +129,43 @@ test('the quality picker downloads the chosen resolution', { skip }, async () =>
   await popup.close();
 });
 
+test('records a live stream from the popup and saves it as MP4', { skip }, async () => {
+  const tabId = await tabIdOf(origin);
+  await waitFor(async () => (await mediaOf(tabId)).find(m => m.url.includes('/live/'))?.live === true);
+  const popup = await openPopupWith(tabId);
+  const item = popup.locator('.item').filter({ has: popup.locator('.item__name', { hasText: 'live/index.m3u8' }) });
+  await item.getByText('Ao vivo', { exact: true }).waitFor();
+
+  await item.getByRole('button', { name: 'Gravar' }).click();
+  await item.getByText(/Gravando · 00:0[2-9]/).waitFor({ timeout: 30_000 });
+  if (process.env.MEDIADOWN_E2E_SCREENSHOTS) {
+    await popup.screenshot({ path: path.join(process.env.MEDIADOWN_E2E_SCREENSHOTS, 'popup-recording.png') });
+  }
+  await item.getByRole('button', { name: 'Parar e salvar' }).click();
+  await item.getByText('Concluído').waitFor({ timeout: 30_000 });
+
+  const popupTabId = await popup.evaluate(async () => (await chrome.tabs.getCurrent()).id);
+  const job = (await mediaOf(popupTabId)).find(m => m.url.includes('/live/')).job;
+  assert.match(job.fileName, /— gravação \d{4}-\d{2}-\d{2} \d{2}h\d{2}\.mp4$/);
+  const file = path.join(dirs.downloads, 'Media Downloader', job.fileName);
+  assert.equal((await readFile(file)).subarray(4, 8).toString(), 'ftyp');
+  assert.ok(mediaSeconds(file) >= 1.5, 'recorded at least the two seconds shown');
+  await popup.close();
+});
+
 // ---------- helpers ----------
+
+function mediaSeconds(file) {
+  const ffmpeg = path.join(FFMPEG_DIR, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+  let info = '';
+  try {
+    execFileSync(ffmpeg, ['-hide_banner', '-i', file], { stdio: 'pipe' });
+  } catch (error) {
+    info = String(error.stderr);
+  }
+  const [h, m, s] = (info.match(/Duration: (\d+):(\d+):([\d.]+)/) ?? [0, 0, 0, 0]).slice(1).map(Number);
+  return h * 3600 + m * 60 + s;
+}
 
 function generateMedia(dir) {
   const ffmpeg = path.join(FFMPEG_DIR, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
@@ -143,6 +179,13 @@ function generateMedia(dir) {
     execFileSync('mkdir', ['-p', path.join(dir, `multi/${height}`)]);
     run([...source, '-vf', `scale=${width}:${height}`, ...encode, '-f', 'hls', '-hls_time', '1', '-hls_playlist_type', 'vod', `multi/${height}/index.m3u8`]);
   }
+  // 1-second segments with a keyframe each: served as a sliding live window.
+  execFileSync('mkdir', ['-p', path.join(dir, 'live-src')]);
+  run([
+    '-f', 'lavfi', '-i', 'testsrc=duration=30:size=320x240:rate=25', '-f', 'lavfi', '-i', 'sine=duration=30',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-force_key_frames', 'expr:gte(t,n_forced*1)', '-c:a', 'aac',
+    '-f', 'hls', '-hls_time', '1', '-hls_playlist_type', 'vod', '-hls_segment_filename', 'live-src/seg%d.ts', 'live-src/vod.m3u8',
+  ]);
   execFileSync('sh', ['-c', `printf '%s' "$0" > multi/master.m3u8`, [
     '#EXTM3U',
     '#EXT-X-STREAM-INF:BANDWIDTH=600000,RESOLUTION=320x240', '240/index.m3u8',
@@ -164,11 +207,27 @@ function videoSize(file) {
 async function serve(root) {
   const page = `<!doctype html><title>Aula 7 — Introdução ao Rust</title>
     <video src="/hotlink/real.mp4" preload="auto" muted></video>
-    <script>fetch('/hls/index.m3u8'); fetch('/multi/master.m3u8')</script>`;
+    <script>fetch('/hls/index.m3u8'); fetch('/multi/master.m3u8'); fetch('/live/index.m3u8')</script>`;
+  const started = Date.now();
+  // A live playlist as published `elapsed` seconds in: a 3-segment window advancing every second, no ENDLIST.
+  const livePlaylist = () => {
+    const newest = Math.min(Math.floor((Date.now() - started) / 1000) + 3, 30);
+    const first = newest - 3;
+    const lines = ['#EXTM3U', '#EXT-X-VERSION:3', '#EXT-X-TARGETDURATION:1', `#EXT-X-MEDIA-SEQUENCE:${first}`];
+    for (let i = first; i < newest; i++) lines.push('#EXTINF:1.0,', `seg${i}.ts`);
+    return lines.join('\n') + '\n';
+  };
   const types = { '.m3u8': 'application/vnd.apple.mpegurl', '.ts': 'video/mp2t', '.mp4': 'video/mp4' };
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
     if (url.pathname === '/stream.html') return res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(page);
+    if (url.pathname === '/live/index.m3u8') {
+      return res.writeHead(200, { 'content-type': 'application/vnd.apple.mpegurl', 'cache-control': 'no-cache' }).end(livePlaylist());
+    }
+    if (url.pathname.startsWith('/live/seg')) {
+      const body = await readFile(path.join(root, 'live-src', path.basename(url.pathname))).catch(() => null);
+      return body ? res.writeHead(200, { 'content-type': 'video/mp2t', 'content-length': body.length }).end(body) : res.writeHead(404).end();
+    }
     const hotlink = url.pathname.startsWith('/hotlink/');
     if (hotlink && !req.headers.referer) return res.writeHead(403).end();
     const relative = hotlink ? url.pathname.slice('/hotlink/'.length) : url.pathname.slice(1);

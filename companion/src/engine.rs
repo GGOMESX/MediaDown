@@ -174,6 +174,24 @@ pub fn classify_error(stderr: &str) -> ErrorCode {
     }
 }
 
+/// Maps ffmpeg's stderr (used for live recording) to user-actionable codes.
+pub fn classify_ffmpeg_error(stderr: &str) -> ErrorCode {
+    let text = stderr.to_ascii_lowercase();
+    if text.contains("not on whitelist") {
+        ErrorCode::InvalidRequest
+    } else if text.contains("403") || text.contains("401") {
+        ErrorCode::Forbidden
+    } else if text.contains("404") || text.contains("410") {
+        ErrorCode::Expired
+    } else if text.contains("no space left") {
+        ErrorCode::DiskFull
+    } else if ["connection", "timed out", "resolve", "network", "i/o error"].iter().any(|k| text.contains(k)) {
+        ErrorCode::Network
+    } else {
+        ErrorCode::Unknown
+    }
+}
+
 /// Last meaningful "ERROR:" line, trimmed for display; avoids sending whole tracebacks to the UI.
 pub fn error_detail(stderr: &str) -> String {
     let line = stderr.lines().rev().find(|l| l.contains("ERROR:")).or_else(|| stderr.lines().rev().find(|l| !l.trim().is_empty()));
@@ -301,6 +319,15 @@ mod tests {
         assert_eq!(classify_error("OSError: [Errno 28] No space left on device"), ErrorCode::DiskFull);
         assert_eq!(classify_error("ERROR: Read timed out"), ErrorCode::Network);
         assert_eq!(classify_error("ERROR: something new"), ErrorCode::Unknown);
+    }
+
+    #[test]
+    fn classifies_ffmpeg_errors() {
+        assert_eq!(classify_ffmpeg_error("Protocol 'file' not on whitelist 'http,https,tcp,tls'!"), ErrorCode::InvalidRequest);
+        assert_eq!(classify_ffmpeg_error("Server returned 403 Forbidden (access denied)"), ErrorCode::Forbidden);
+        assert_eq!(classify_ffmpeg_error("HTTP error 404 Not Found"), ErrorCode::Expired);
+        assert_eq!(classify_ffmpeg_error("Connection refused"), ErrorCode::Network);
+        assert_eq!(classify_ffmpeg_error("Invalid data found when processing input"), ErrorCode::Unknown);
     }
 
     #[test]

@@ -177,7 +177,7 @@
     "message": "Ao vivo"
   },
   "liveNotSupported": {
-    "message": "Transmissão ao vivo: a gravação ainda não é suportada. Baixe depois que ela terminar e virar vídeo gravado."
+    "message": "Transmissão ao vivo. Para gravar, instale o app MediaDown para Windows."
   },
   "qualityLabel": {
     "message": "Qualidade"
@@ -229,5 +229,32 @@
   },
   "optionsHistoryLabel": {
     "message": "Manter histórico de downloads (somente neste navegador)"
+  },
+  "record": {
+    "message": "Gravar"
+  },
+  "stopRecording": {
+    "message": "Parar e salvar"
+  },
+  "recordingProgress": {
+    "message": "Gravando · $1"
+  },
+  "recordingSize": {
+    "message": "$1 gravados"
+  },
+  "liveRecordHint": {
+    "message": "Grava na melhor qualidade disponível, até você parar ou a transmissão terminar (máx. 6 h)."
+  },
+  "stopReasonDiskFull": {
+    "message": "Gravação parada automaticamente: pouco espaço em disco."
+  },
+  "stopReasonMaxDuration": {
+    "message": "Gravação parada no limite de 6 horas."
+  },
+  "errorBusy": {
+    "message": "Já há 2 gravações em andamento. Pare uma delas para começar outra."
+  },
+  "refusalNotLive": {
+    "message": "Este vídeo não é uma transmissão ao vivo: use Baixar."
   }
 }

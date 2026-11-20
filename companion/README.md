@@ -31,7 +31,8 @@ extension (service worker) ──connectNative──► mediadown-host.exe
 | `protocol.rs` | Framing (64 KB in / 1 MB out limits), typed messages with `deny_unknown_fields`, protocol v2 |
 | `validation.rs` | http/https URLs, header values without CR/LF, file and folder names safe on Windows, escaping `%` in the yt-dlp template |
 | `engine.rs` | yt-dlp arguments (`--ignore-config`, `--` before the URL, quality `best`/`maxHeight`/`audioMp3`, subtitles as `.srt`), progress parsing and error classification |
-| `jobs.rs` | Queue (2 at a time), cancellation, "show in folder" only for files the host created |
+| `jobs.rs` | Download queue (2 at a time), recordings beside it (up to 2), cancellation, clean stop, "show in folder" only for files the host created |
+| `recorder.rs` | Live recording with ffmpeg: `-protocol_whitelist http,https,tcp,tls`, MPEG-TS then MP4 remux, `-progress` parsing, unique names, 6 h cap and disk-space stop |
 | `platform.rs` | Windows: Job Object `KILL_ON_JOB_CLOSE`, `CREATE_NO_WINDOW`, Explorer |
 
 ### Security decisions
@@ -45,7 +46,10 @@ extension (service worker) ──connectNative──► mediadown-host.exe
 - Engines pinned by version and **SHA-256** in `installer/engines.json`. The installer
   aborts if any byte differs.
 - Closing the browser ends the host (EOF on stdin), and the Job Object kills yt-dlp
-  and ffmpeg along with it.
+  and ffmpeg along with it. Recordings first get up to 10 s to stop with `q` and become MP4.
+  If they run out of time, the `.ts` file stays playable.
+- Recordings stop cleanly with `q` on ffmpeg's stdin, which works on Windows (no signals).
+  If ffmpeg doesn't respond within 15 s, the process tree is terminated.
 
 ## Development
 
@@ -59,7 +63,8 @@ MEDIADOWN_TEST_YTDLP=$(which yt-dlp) MEDIADOWN_TEST_FFMPEG_DIR=/usr/bin cargo te
 ```
 
 Environment variables honored by the host (tests only): `MEDIADOWN_YTDLP`,
-`MEDIADOWN_FFMPEG_DIR`, `MEDIADOWN_DOWNLOAD_DIR`.
+`MEDIADOWN_FFMPEG_DIR`, `MEDIADOWN_DOWNLOAD_DIR`, `MEDIADOWN_MAX_RECORDING_SECONDS`,
+`MEDIADOWN_MIN_FREE_BYTES`.
 
 ### Updating yt-dlp or ffmpeg
 

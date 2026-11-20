@@ -10,21 +10,24 @@ export interface CompanionStatus {
 
 export type ExtensionRequest =
   | { type: 'download'; tabId: number; mediaKey: string; via?: 'browser' | 'companion'; quality?: QualityChoice }
+  | { type: 'record'; tabId: number; mediaKey: string }
+  | { type: 'stop'; tabId: number; mediaKey: string }
   | { type: 'cancel'; tabId: number; mediaKey: string }
   | { type: 'reveal'; tabId: number; mediaKey: string }
   | { type: 'companionStatus' };
 
 export type DownloadRequest = Extract<ExtensionRequest, { type: 'download' }>;
+export type RecordRequest = Extract<ExtensionRequest, { type: 'record' }>;
 
 export type DownloadRefusal =
-  | 'notFound' | 'protected' | 'live' | 'failed' | 'companionNotInstalled' | 'companionEngineMissing' | 'companionIncompatible';
+  | 'notFound' | 'protected' | 'live' | 'notLive' | 'failed' | 'companionNotInstalled' | 'companionEngineMissing' | 'companionIncompatible';
 
 export type DownloadResponse =
   | { ok: true; via: 'browser'; downloadId: number }
   | { ok: true; via: 'companion'; jobId: string }
   | { ok: false; reason: DownloadRefusal };
 
-const MEDIA_ACTIONS = new Set(['download', 'cancel', 'reveal']);
+const MEDIA_ACTIONS = new Set(['download', 'record', 'stop', 'cancel', 'reveal']);
 
 /** Messages cross a trust boundary: validate shape instead of trusting the caller. */
 export function parseRequest(raw: unknown): ExtensionRequest | null {
@@ -41,5 +44,5 @@ export function parseRequest(raw: unknown): ExtensionRequest | null {
     if (choice === null) return null;
     return { type, tabId, mediaKey, ...(via && { via }), ...(choice && { quality: choice }) };
   }
-  return { type: type as 'cancel' | 'reveal', tabId, mediaKey };
+  return { type: type as 'record' | 'stop' | 'cancel' | 'reveal', tabId, mediaKey };
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { startDownload, controlJob } from './download-service';
+import { startDownload, startRecording, controlJob } from './download-service';
 import type { CompanionGateway, HostRequest } from './companion-client';
 import type { CompanionStatus } from './messages';
 import { updateTabMedia, readTabMedia } from './tab-media-store';
@@ -256,5 +256,56 @@ describe('startDownload of subtitle files', () => {
     expect(await startDownload({ type: 'download', tabId: TAB, mediaKey: subtitle.key }, fakeCompanion().gateway)).toEqual({ ok: false, reason: 'failed' });
     expect(download).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
+  });
+});
+
+describe('startRecording', () => {
+  const LIVE = media({ kind: 'hls', live: true, key: 'https://live.example.com/canal/index.m3u8', url: 'https://live.example.com/canal/index.m3u8?t=1' });
+
+  beforeEach(() => {
+    fakeBrowser.reset();
+    fakeBrowser.tabs.get = vi.fn().mockResolvedValue({ id: TAB, title: 'Canal Ao Vivo', url: 'https://tv.example.com/ao-vivo' }) as never;
+  });
+
+  it('asks the companion to record, named after the page and the start time', async () => {
+    await seed(LIVE);
+    const { gateway, sent } = fakeCompanion();
+
+    const response = await startRecording({ type: 'record', tabId: TAB, mediaKey: LIVE.key }, gateway, new Date(2026, 10, 20, 21, 30));
+
+    expect(response).toMatchObject({ ok: true, via: 'companion' });
+    expect(sent).toEqual([{
+      type: 'record',
+      jobId: (response as { jobId: string }).jobId,
+      url: LIVE.url,
+      referer: 'https://tv.example.com/ao-vivo',
+      userAgent: navigator.userAgent,
+      folder: 'Media Downloader',
+      fileName: 'Canal Ao Vivo — gravação 2026-11-20 21h30',
+    }]);
+    expect((await readTabMedia(TAB))[0]?.job).toMatchObject({ state: 'queued', recording: true });
+  });
+
+  it.each([
+    ['protected lives', { protection: 'protected' as const }, 'protected'],
+    ['recorded (non-live) streams', { live: false }, 'notLive'],
+  ])('refuses %s', async (_label, overrides, reason) => {
+    await seed({ ...LIVE, ...overrides });
+    const { gateway, sent } = fakeCompanion();
+    expect(await startRecording({ type: 'record', tabId: TAB, mediaKey: LIVE.key }, gateway)).toEqual({ ok: false, reason });
+    expect(sent).toEqual([]);
+  });
+
+  it('explains when the companion is missing', async () => {
+    await seed(LIVE);
+    const { gateway } = fakeCompanion({ state: 'notInstalled' });
+    expect(await startRecording({ type: 'record', tabId: TAB, mediaKey: LIVE.key }, gateway)).toEqual({ ok: false, reason: 'companionNotInstalled' });
+  });
+
+  it('stops a recording through its job', async () => {
+    await seed({ ...LIVE, job: { id: 't5-rec', state: 'running', recording: true } });
+    const { gateway, sent } = fakeCompanion();
+    expect(await controlJob('stop', TAB, LIVE.key, gateway)).toBe(true);
+    expect(sent).toEqual([{ type: 'stop', jobId: 't5-rec' }]);
   });
 });

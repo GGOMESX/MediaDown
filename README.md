@@ -5,8 +5,8 @@ Extensão de navegador + app companion para Windows para detectar e baixar víde
 
 | Pasta | Conteúdo | Status |
 |---|---|---|
-| `extension/` | Extensão MV3 (WXT + TypeScript + Vue) | Sprints 1–4 ✅ |
-| `companion/` | Host nativo em Rust (Windows) que executa yt-dlp/ffmpeg | Sprints 3–4 ✅ ([detalhes](companion/README.md)) |
+| `extension/` | Extensão MV3 (WXT + TypeScript + Vue) | Sprints 1–5 ✅ |
+| `companion/` | Host nativo em Rust (Windows) que executa yt-dlp/ffmpeg | Sprints 3–5 ✅ ([detalhes](companion/README.md)) |
 
 ## Instalação rápida (Windows)
 
@@ -84,9 +84,8 @@ npm run build     # gera .output/chrome-mv3
     desativar nas opções);
   - arquivos `.vtt` avulsos aparecem como **Legenda** e são convertidos para `.srt`;
   - os segmentos de legenda dos streams não aparecem na lista.
-- **Lives:** transmissões ao vivo recebem a marca **Ao vivo** e não podem ser baixadas,
-  com a explicação na tela. Gravar uma live exige parar o yt-dlp de forma limpa no
-  Windows, o que fica para uma sprint futura.
+- **Lives:** transmissões ao vivo recebem a marca **Ao vivo**. A partir da Sprint 5,
+  elas são gravadas (veja abaixo).
 - **Histórico:** link "Histórico" no popup.
   - Guarda até 200 downloads (nome, site, data, tamanho) e fica só no navegador.
   - Pode ser limpo na própria página e desativado nas opções.
@@ -95,6 +94,25 @@ npm run build     # gera .output/chrome-mv3
   como "Sem proteção".
 - **Protocolo v2** entre extensão e app. Se só um dos dois for atualizado, o popup pede
   para reinstalar o app em vez de falhar.
+
+## Gravação de transmissões ao vivo (Sprint 5)
+
+- Em itens **Ao vivo**, o botão **Gravar** inicia a gravação pelo app, na melhor
+  qualidade disponível. O popup mostra o tempo gravado e o tamanho, e **Parar e salvar**
+  encerra a gravação.
+- O arquivo recebe a data e a hora no nome, como `Canal — gravação 2026-11-20 21h30.mp4`,
+  e nunca sobrescreve uma gravação anterior.
+- A gravação termina sozinha quando a transmissão acaba, ao atingir **6 horas** ou se o
+  disco ficar com menos de **500 MB** livres. Nos dois últimos casos, o popup avisa o motivo.
+- São no máximo 2 gravações ao mesmo tempo, e elas não ocupam a fila de downloads.
+- **Nada se perde:**
+  - a gravação é feita em MPEG-TS e convertida para MP4 ao final;
+  - se o navegador fechar no meio, o app tenta parar e converter;
+  - se não conseguir, o `.ts` continua tocável (VLC, Filmes e TV).
+- **Segurança:**
+  - o ffmpeg só aceita `http`/`https`, então uma playlist maliciosa não consegue ler
+    arquivos do seu computador (`file://`), e isso tem teste;
+  - lives com DRM continuam bloqueadas.
 
 ## Atualização automática do yt-dlp
 

@@ -6,6 +6,7 @@ use std::thread;
 use mediadown_host::engine::EnginePaths;
 use mediadown_host::jobs::{Config, JobManager, ManagerMsg};
 use mediadown_host::protocol::{self, Event};
+use mediadown_host::recorder::Limits;
 
 const MAX_CONCURRENT_DOWNLOADS: usize = 2;
 
@@ -17,8 +18,9 @@ fn main() {
     let writer = thread::spawn(move || {
         let mut stdout = BufWriter::new(io::stdout().lock());
         for event in event_rx {
+            // Browser gone: stop writing, but let the manager finish saving recordings.
             if protocol::write_event(&mut stdout, &event).is_err() {
-                std::process::exit(0); // browser went away
+                break;
             }
         }
     });
@@ -41,7 +43,12 @@ fn main() {
         }
     });
 
-    let config = Config { downloads_dir: downloads_dir(), engines: EnginePaths::discover(), max_concurrent: MAX_CONCURRENT_DOWNLOADS };
+    let config = Config {
+        downloads_dir: downloads_dir(),
+        engines: EnginePaths::discover(),
+        max_concurrent: MAX_CONCURRENT_DOWNLOADS,
+        recording_limits: Limits::from_env(),
+    };
     JobManager::new(config, event_tx, manager_tx).run(manager_rx);
     let _ = writer.join();
 }

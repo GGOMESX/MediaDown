@@ -6,7 +6,7 @@ import type { QualityChoice } from './quality';
 import { completePending, dropPending, pendingIdForJob } from './history';
 
 export const NATIVE_HOST_NAME = 'com.mediadown.host';
-const PROTOCOL_VERSION = 2;
+const PROTOCOL_VERSION = 3;
 // The first yt-dlp start on Windows unpacks itself and can take a few seconds.
 const HELLO_TIMEOUT_MS = 20_000;
 const IDLE_DISCONNECT_MS = 15_000;
@@ -24,7 +24,8 @@ export type HostRequest =
       quality: QualityChoice;
       subtitles: boolean;
     }
-  | { type: 'cancel' | 'reveal'; jobId: string };
+  | { type: 'record'; jobId: string; url: string; referer?: string; userAgent?: string; folder: string; fileName: string }
+  | { type: 'stop' | 'cancel' | 'reveal'; jobId: string };
 
 /** What download-service needs from the companion; tests swap in a fake. */
 export interface CompanionGateway {
@@ -48,7 +49,7 @@ class CompanionConnection implements CompanionGateway {
   async send(request: HostRequest): Promise<void> {
     const status = await this.connect();
     if (status.state !== 'ready' || !this.port) throw new Error(`companion ${status.state}`);
-    if (request.type === 'download') this.activeJobs.add(request.jobId);
+    if (request.type === 'download' || request.type === 'record') this.activeJobs.add(request.jobId);
     clearTimeout(this.idleTimer);
     this.port.postMessage(request);
   }

@@ -56,6 +56,13 @@ export function chooseStem(rawUrl: string, pageTitle: string): string {
   return sanitizeFileName(name).replace(/\.(mp4|webm|mov|mkv|ogv|m4v)$/i, '');
 }
 
+/** "Canal — gravação 2026-11-20 14h05": recordings of the same live never collide or overwrite. */
+export function recordingStem(stem: string, startedAt: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const date = `${startedAt.getFullYear()}-${pad(startedAt.getMonth() + 1)}-${pad(startedAt.getDate())}`;
+  return sanitizeFileName(`${stem} — gravação ${date} ${pad(startedAt.getHours())}h${pad(startedAt.getMinutes())}`);
+}
+
 /** chrome.downloads expects a path relative to the Downloads folder, always with "/". */
 export function buildDownloadPath(folder: string, fileName: string): string {
   return folder ? `${folder}/${fileName}` : fileName;

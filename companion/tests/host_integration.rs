@@ -57,6 +57,16 @@ fn generate_media(tools: &Tools, dir: &Path) {
         let output = format!("multi/{height}/index.m3u8");
         run(&[&source[..], &["-vf", &scale, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-f", "hls", "-hls_time", "1", "-hls_playlist_type", "vod", &output]].concat());
     }
+    // 1-second segments with a keyframe each, served as a sliding "live" window by the server.
+    std::fs::create_dir_all(dir.join("live-src")).unwrap();
+    let live_source = ["-f", "lavfi", "-i", "testsrc=duration=30:size=320x240:rate=25", "-f", "lavfi", "-i", "sine=duration=30"];
+    run(&[
+        &live_source[..],
+        &["-c:v", "libx264", "-pix_fmt", "yuv420p", "-force_key_frames", "expr:gte(t,n_forced*1)", "-c:a", "aac"],
+        &["-f", "hls", "-hls_time", "1", "-hls_playlist_type", "vod", "-hls_segment_filename", "live-src/seg%d.ts", "live-src/vod.m3u8"],
+    ]
+    .concat());
+
     std::fs::create_dir_all(dir.join("multi/subs")).unwrap();
     std::fs::write(dir.join("multi/subs/pt.vtt"), "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nOlá, mundo\n").unwrap();
     std::fs::write(dir.join("multi/subs/pt.m3u8"), "#EXTM3U\n#EXT-X-TARGETDURATION:3\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:3.0,\npt.vtt\n#EXT-X-ENDLIST\n").unwrap();
@@ -90,18 +100,42 @@ struct Server {
 fn start_server(root: PathBuf) -> Server {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
+    let started = Instant::now();
     thread::spawn(move || {
         for stream in listener.incoming().flatten() {
             let root = root.clone();
             thread::spawn(move || {
-                let _ = serve(stream, &root);
+                let _ = serve(stream, &root, started);
             });
         }
     });
     Server { origin }
 }
 
-fn serve(mut stream: TcpStream, root: &Path) -> std::io::Result<()> {
+const LIVE_SEGMENTS: u64 = 30;
+const LIVE_WINDOW: u64 = 3;
+
+/// A live playlist as a server would publish it `elapsed` seconds into the stream:
+/// a 3-segment window that advances every second, with ENDLIST only once a short live is over.
+fn live_playlist(elapsed: Duration, total_segments: u64) -> String {
+    let newest = (elapsed.as_secs() + LIVE_WINDOW).min(total_segments);
+    let first = newest.saturating_sub(LIVE_WINDOW);
+    let mut playlist = format!("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:{first}\n");
+    for index in first..newest {
+        playlist.push_str(&format!("#EXTINF:1.0,\nseg{index}.ts\n"));
+    }
+    if newest == total_segments && total_segments < LIVE_SEGMENTS {
+        playlist.push_str("#EXT-X-ENDLIST\n");
+    }
+    playlist
+}
+
+fn respond(stream: &mut TcpStream, content_type: &str, body: &[u8]) -> std::io::Result<()> {
+    write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n", body.len())?;
+    stream.write_all(body)
+}
+
+fn serve(mut stream: TcpStream, root: &Path, started: Instant) -> std::io::Result<()> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut request_line = String::new();
     reader.read_line(&mut request_line)?;
@@ -113,6 +147,26 @@ fn serve(mut stream: TcpStream, root: &Path) -> std::io::Result<()> {
             break;
         }
         has_referer |= header.to_ascii_lowercase().starts_with("referer:");
+    }
+
+    // Live routes: /live (30 s, keeps going), /shortlive (4 s, then ends), /evil-live (points at a local file).
+    let live_total = match path.split('/').nth(1) {
+        Some("live") => Some(LIVE_SEGMENTS),
+        Some("shortlive") => Some(4),
+        _ => None,
+    };
+    if let Some(total) = live_total {
+        if path.ends_with("index.m3u8") {
+            return respond(&mut stream, "application/vnd.apple.mpegurl", live_playlist(started.elapsed(), total).as_bytes());
+        }
+        let segment = path.rsplit('/').next().unwrap_or_default();
+        let body = std::fs::read(root.join("live-src").join(segment)).unwrap_or_default();
+        return respond(&mut stream, "video/mp2t", &body);
+    }
+    if path == "/evil-live/index.m3u8" {
+        let local = if cfg!(windows) { "file:///C:/Windows/win.ini" } else { "file:///etc/hostname" };
+        let playlist = format!("#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:1.0,\n{local}\n#EXTINF:1.0,\n{local}\n");
+        return respond(&mut stream, "application/vnd.apple.mpegurl", playlist.as_bytes());
     }
 
     // /hotlink/* needs a Referer; /slow/* trickles bytes so a cancel can land mid-download.
@@ -160,9 +214,14 @@ struct Host {
 
 impl Host {
     fn start(tools: &Tools) -> Self {
+        Self::start_with_env(tools, &[])
+    }
+
+    fn start_with_env(tools: &Tools, extra_env: &[(&str, &str)]) -> Self {
         let downloads = TempDir::new().unwrap();
         let mut child = Command::new(env!("CARGO_BIN_EXE_mediadown-host"))
             .arg("chrome-extension://test/")
+            .envs(extra_env.iter().copied())
             .env("MEDIADOWN_YTDLP", &tools.yt_dlp)
             .env("MEDIADOWN_FFMPEG_DIR", &tools.ffmpeg_dir)
             .env("MEDIADOWN_DOWNLOAD_DIR", downloads.path())
@@ -390,6 +449,140 @@ fn saves_stream_subtitles_as_srt_next_to_the_video() {
     let text = std::fs::read_to_string(&srt).unwrap_or_else(|_| panic!("missing {}", srt.display()));
     assert!(text.contains("00:00:00,000 --> 00:00:02,000"), "{text}");
     assert!(text.contains("Olá, mundo"), "{text}");
+}
+
+fn record(job_id: &str, url: &str, file_name: &str) -> Value {
+    json!({ "type": "record", "jobId": job_id, "url": url, "referer": null, "userAgent": "Mozilla/5.0", "folder": "Gravações", "fileName": file_name })
+}
+
+fn recorded_at_least(job_id: &str, seconds: u64) -> impl Fn(&Value) -> bool + '_ {
+    move |e| e["jobId"] == job_id && e["type"] == "progress" && e["elapsedSeconds"].as_u64().is_some_and(|s| s >= seconds)
+}
+
+/// Duration in seconds, from ffmpeg's input summary.
+fn media_seconds(tools: &Tools, file: &Path) -> f64 {
+    let ffmpeg = tools.ffmpeg_dir.join(if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" });
+    let output = Command::new(ffmpeg).args(["-hide_banner", "-i"]).arg(file).output().unwrap();
+    let info = String::from_utf8_lossy(&output.stderr).into_owned();
+    let duration = info.split("Duration: ").nth(1).and_then(|rest| rest.split(',').next()).unwrap_or_else(|| panic!("no duration: {info}"));
+    duration.split(':').fold(0.0, |total, part| total * 60.0 + part.trim().parse::<f64>().unwrap())
+}
+
+fn files_in(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir).map(|e| e.flatten().map(|f| f.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default();
+    names.sort();
+    names
+}
+
+#[test]
+fn records_a_live_stream_until_stopped() {
+    let tools = require_tools!();
+    let (_media, server) = fixtures(&tools);
+    let mut host = Host::start(&tools);
+
+    host.send(record("rec", &format!("{}/live/index.m3u8", server.origin), "Ao vivo"));
+    host.wait_for(recorded_at_least("rec", 3));
+    host.send(json!({ "type": "stop", "jobId": "rec" }));
+    let done = host.wait_for(is_final("rec")).pop().unwrap();
+
+    assert_eq!(done["type"], "done", "{done:#?}");
+    assert_eq!(done["fileName"], "Ao vivo.mp4");
+    assert_eq!(done["stopReason"], Value::Null);
+    let folder = host.downloads.path().join("Gravações");
+    assert_eq!(files_in(&folder), ["Ao vivo.mp4"], "the intermediate .ts is removed");
+    let file = folder.join("Ao vivo.mp4");
+    assert_eq!(&std::fs::read(&file).unwrap()[4..8], b"ftyp");
+    assert!(media_seconds(&tools, &file) >= 2.5, "recorded about as long as requested");
+}
+
+#[test]
+fn finishes_when_the_live_ends_and_never_overwrites() {
+    let tools = require_tools!();
+    let (_media, server) = fixtures(&tools);
+    let mut host = Host::start(&tools);
+    let url = format!("{}/shortlive/index.m3u8", server.origin);
+
+    host.send(record("first", &url, "Curta"));
+    let first = host.wait_for(is_final("first")).pop().unwrap();
+    assert_eq!((first["type"].as_str(), first["fileName"].as_str()), (Some("done"), Some("Curta.mp4")), "{first:#?}");
+
+    host.send(record("second", &url, "Curta"));
+    let second = host.wait_for(is_final("second")).pop().unwrap();
+    assert_eq!(second["fileName"], "Curta (2).mp4", "{second:#?}");
+}
+
+#[test]
+fn stops_at_the_maximum_duration() {
+    let tools = require_tools!();
+    let (_media, server) = fixtures(&tools);
+    let mut host = Host::start_with_env(&tools, &[("MEDIADOWN_MAX_RECORDING_SECONDS", "2")]);
+
+    host.send(record("capped", &format!("{}/live/index.m3u8", server.origin), "Limite"));
+    let done = host.wait_for(is_final("capped")).pop().unwrap();
+    assert_eq!(done["type"], "done", "{done:#?}");
+    assert_eq!(done["stopReason"], "maxDuration");
+}
+
+#[test]
+fn refuses_to_record_without_disk_space() {
+    let tools = require_tools!();
+    let (_media, server) = fixtures(&tools);
+    let mut host = Host::start_with_env(&tools, &[("MEDIADOWN_MIN_FREE_BYTES", "18446744073709551615")]);
+
+    host.send(record("full", &format!("{}/live/index.m3u8", server.origin), "Sem espaço"));
+    let failed = host.wait_for(is_final("full")).pop().unwrap();
+    assert_eq!(failed["error"], "diskFull", "{failed:#?}");
+}
+
+#[test]
+fn never_reads_local_files_referenced_by_a_playlist() {
+    let tools = require_tools!();
+    let (_media, server) = fixtures(&tools);
+    let mut host = Host::start(&tools);
+
+    host.send(record("evil", &format!("{}/evil-live/index.m3u8", server.origin), "Malicioso"));
+    let failed = host.wait_for(is_final("evil")).pop().unwrap();
+    assert_eq!(failed["type"], "failed", "{failed:#?}");
+    assert_eq!(files_in(&host.downloads.path().join("Gravações")), Vec::<String>::new(), "nothing may be written");
+}
+
+#[test]
+fn limits_simultaneous_recordings() {
+    let tools = require_tools!();
+    let (_media, server) = fixtures(&tools);
+    let mut host = Host::start(&tools);
+    let url = format!("{}/live/index.m3u8", server.origin);
+
+    for id in ["r1", "r2", "r3"] {
+        host.send(record(id, &url, id));
+    }
+    let busy = host.wait_for(is_final("r3")).pop().unwrap();
+    assert_eq!(busy["error"], "busy", "{busy:#?}");
+    for id in ["r1", "r2"] {
+        host.send(json!({ "type": "stop", "jobId": id }));
+    }
+    let finals = host.wait_for_jobs(&["r1", "r2"]);
+    assert!(finals.iter().all(|e| e["type"] == "done"), "{finals:#?}");
+}
+
+#[test]
+fn closing_the_browser_saves_the_recording() {
+    let tools = require_tools!();
+    let (_media, server) = fixtures(&tools);
+    let mut host = Host::start(&tools);
+
+    host.send(record("orphan", &format!("{}/live/index.m3u8", server.origin), "Fechou"));
+    host.wait_for(recorded_at_least("orphan", 2));
+    drop(host.stdin.take());
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while host.child.try_wait().unwrap().is_none() {
+        assert!(Instant::now() < deadline, "host kept running after the browser closed");
+        thread::sleep(Duration::from_millis(100));
+    }
+    let folder = host.downloads.path().join("Gravações");
+    assert_eq!(files_in(&folder), ["Fechou.mp4"]);
+    assert!(media_seconds(&tools, &folder.join("Fechou.mp4")) >= 1.5);
 }
 
 #[test]

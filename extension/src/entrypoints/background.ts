@@ -5,7 +5,7 @@ import { mergeMedia, applyInspection, visibleMedia } from '@/core/tab-media';
 import { updateTabMedia, clearTabMedia } from '@/core/tab-media-store';
 import { fetchAndInspectManifest } from '@/core/manifest-fetcher';
 import { parseRequest, type ExtensionRequest } from '@/core/messages';
-import { startDownload, controlJob } from '@/core/download-service';
+import { startDownload, startRecording, controlJob } from '@/core/download-service';
 import { companion, failStaleJobs } from '@/core/companion-client';
 import { completePending, dropPending, pendingIdForDownload } from '@/core/history';
 
@@ -44,6 +44,9 @@ function handleRequest(request: ExtensionRequest): Promise<unknown> {
   switch (request.type) {
     case 'download':
       return startDownload(request, companion);
+    case 'record':
+      return startRecording(request, companion);
+    case 'stop':
     case 'cancel':
     case 'reveal':
       return controlJob(request.type, request.tabId, request.mediaKey, companion).catch(() => false);

@@ -36,6 +36,10 @@ describe('parseHostEvent', () => {
     expect(parseHostEvent({ type: 'rm -rf', jobId: 'x' })).toBeNull();
   });
 
+  it('drops unknown stop reasons from a newer host', () => {
+    expect(parseHostEvent({ type: 'done', jobId: 't1-a', fileName: 'a.mp4', stopReason: 'aliens' })).toMatchObject({ stopReason: null });
+  });
+
   it('downgrades unknown error codes from a newer host to "unknown"', () => {
     expect(parseHostEvent({ type: 'failed', jobId: 't1-a', error: 'quantum', detail: '' })).toMatchObject({ error: 'unknown' });
   });
@@ -63,6 +67,16 @@ describe('job lifecycle', () => {
 
   it('ignores events for other jobs', () => {
     expect(applyHostEvent(started, { type: 'done', jobId: 't1-other', fileName: 'x' })).toEqual(started);
+  });
+
+  it('tracks recordings: elapsed time, size and why they stopped', () => {
+    let list = applyJobStarted([base], base.key, 't1-rec', true);
+    expect(list[0]?.job).toEqual({ id: 't1-rec', state: 'queued', recording: true });
+    list = applyHostEvent(list, { type: 'progress', jobId: 't1-rec', downloadedBytes: 2048, elapsedSeconds: 75 });
+    list = applyHostEvent(list, { type: 'progress', jobId: 't1-rec', downloadedBytes: 4096, elapsedSeconds: null });
+    expect(list[0]?.job).toMatchObject({ state: 'running', downloadedBytes: 4096, elapsedSeconds: 75, recording: true });
+    list = applyHostEvent(list, { type: 'done', jobId: 't1-rec', fileName: 'Live.mp4', stopReason: 'diskFull' });
+    expect(list[0]?.job).toMatchObject({ state: 'done', fileName: 'Live.mp4', stopReason: 'diskFull' });
   });
 
   it('fails only active jobs when the host disconnects', () => {
