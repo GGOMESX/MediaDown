@@ -482,8 +482,11 @@ fn records_a_live_stream_until_stopped() {
 
     host.send(record("rec", &format!("{}/live/index.m3u8", server.origin), "Ao vivo"));
     host.wait_for(recorded_at_least("rec", 3));
+    let stop_sent = Instant::now();
     host.send(json!({ "type": "stop", "jobId": "rec" }));
     let done = host.wait_for(is_final("rec")).pop().unwrap();
+    // Well under the 15 s kill fallback: proves ffmpeg obeyed `q` (the clean stop), not the safety net.
+    assert!(stop_sent.elapsed() < Duration::from_secs(10), "stop took {:?}", stop_sent.elapsed());
 
     assert_eq!(done["type"], "done", "{done:#?}");
     assert_eq!(done["fileName"], "Ao vivo.mp4");
